@@ -3,6 +3,15 @@ from tkinter import messagebox
 from PIL import ImageTk, Image
 import os
 
+# Helper function to add hover effect on buttons
+def add_hover_effect(button, hover_bg, default_bg):
+    def on_enter(e):
+        button['bg'] = hover_bg
+    def on_leave(e):
+        button['bg'] = default_bg
+    button.bind("<Enter>", on_enter)
+    button.bind("<Leave>", on_leave)
+
 # ------------------------ LOGIN FRAME ------------------------
 class LoginFrame(tk.Frame):
     def __init__(self, parent, controller):
@@ -15,11 +24,9 @@ class LoginFrame(tk.Frame):
         self.image_left.pack(side=tk.LEFT, fill=tk.BOTH, expand=False)
         self.image_left.pack_propagate(False)
 
-        # Load image dynamically
         base_dir = os.path.dirname(os.path.abspath(__file__))
         image_path = os.path.join(base_dir, "..", "assets", "icon", "ccclogo.jpg")
         image_path = os.path.normpath(image_path)
-
         try:
             image = Image.open(image_path)
             image = image.resize((675, 700))
@@ -36,37 +43,35 @@ class LoginFrame(tk.Frame):
         self.login_frame.place(x=675 + (675 - panel_width)//2, y=(700 - panel_height)//2)
         self.login_frame.pack_propagate(False)
 
-        # Title
         title = tk.Label(self.login_frame, text="Welcome Back!", font=("Arial", 24, "bold"), bg="white", fg="#0047AB")
         title.place(x=20, y=20)
 
-        # Username
         tk.Label(self.login_frame, text="Username", font=("Arial", 14), bg="white", fg="#333333").place(x=20, y=80)
         self.username_entry = tk.Entry(self.login_frame, font=("Arial", 14), bg="#F0F0F0", bd=0)
         self.username_entry.place(x=20, y=110, width=250, height=35)
 
-        # Password
         tk.Label(self.login_frame, text="Password", font=("Arial", 14), bg="white", fg="#333333").place(x=20, y=160)
         self.password_entry = tk.Entry(self.login_frame, font=("Arial", 14), bg="#F0F0F0", bd=0, show="*")
         self.password_entry.place(x=20, y=190, width=250, height=35)
 
-        # Login button
+        # Buttons with hover
         self.login_button = tk.Button(self.login_frame, text="Login", font=("Arial", 14, "bold"),
                                       bg="#0047AB", fg="white", bd=0, activebackground="#003380",
                                       command=self.login)
         self.login_button.place(x=20, y=250, width=250, height=45)
+        add_hover_effect(self.login_button, "#003380", "#0047AB")
 
-        # Sign Up button
         self.sign_up_button = tk.Button(self.login_frame, text="Sign Up", font=("Arial", 12, "bold"),
                                         bg="#00A86B", fg="white", bd=0, activebackground="#007A4D",
                                         command=lambda: controller.show_frame("SignUpFrame"))
         self.sign_up_button.place(x=20, y=310, width=120, height=35)
+        add_hover_effect(self.sign_up_button, "#007A4D", "#00A86B")
 
-        # Forgot Password button
         self.forgot_password_button = tk.Button(self.login_frame, text="Forgot Password", font=("Arial", 12),
                                                 bg="white", fg="#0047AB", bd=0, activebackground="#F0F0F0",
                                                 command=self.forgot_password)
         self.forgot_password_button.place(x=150, y=310, width=120, height=35)
+        add_hover_effect(self.forgot_password_button, "#E0E0E0", "white")
 
     def login(self):
         username = self.username_entry.get()
@@ -88,11 +93,9 @@ class SignUpFrame(tk.Frame):
         self.image_left.pack(side=tk.LEFT, fill=tk.BOTH, expand=False)
         self.image_left.pack_propagate(False)
 
-        # Load image dynamically
         base_dir = os.path.dirname(os.path.abspath(__file__))
         image_path = os.path.join(base_dir, "..", "assets", "icon", "ccclogo.jpg")
         image_path = os.path.normpath(image_path)
-
         try:
             image = Image.open(image_path)
             image = image.resize((675, 700))
@@ -109,36 +112,33 @@ class SignUpFrame(tk.Frame):
         self.form_frame.place(x=675 + (675 - panel_width)//2, y=(700 - panel_height)//2)
         self.form_frame.pack_propagate(False)
 
-        # Title
         title = tk.Label(self.form_frame, text="Create Account", font=("Arial", 24, "bold"), bg="white", fg="#0047AB")
         title.place(x=20, y=20)
 
-        # Username
         tk.Label(self.form_frame, text="Username", font=("Arial", 14), bg="white", fg="#333333").place(x=20, y=80)
         self.username_entry = tk.Entry(self.form_frame, font=("Arial", 14), bg="#F0F0F0", bd=0)
         self.username_entry.place(x=20, y=110, width=250, height=35)
 
-        # Password
         tk.Label(self.form_frame, text="Password", font=("Arial", 14), bg="white", fg="#333333").place(x=20, y=160)
         self.password_entry = tk.Entry(self.form_frame, font=("Arial", 14), bg="#F0F0F0", bd=0, show="*")
         self.password_entry.place(x=20, y=190, width=250, height=35)
 
-        # Confirm Password
         tk.Label(self.form_frame, text="Confirm Password", font=("Arial", 14), bg="white", fg="#333333").place(x=20, y=240)
         self.confirm_password_entry = tk.Entry(self.form_frame, font=("Arial", 14), bg="#F0F0F0", bd=0, show="*")
         self.confirm_password_entry.place(x=20, y=270, width=250, height=35)
 
-        # Sign Up button
+        # Buttons with hover
         self.sign_up_button = tk.Button(self.form_frame, text="Sign Up", font=("Arial", 14, "bold"),
                                         bg="#00A86B", fg="white", bd=0, activebackground="#007A4D",
                                         command=self.sign_up)
         self.sign_up_button.place(x=20, y=330, width=250, height=45)
+        add_hover_effect(self.sign_up_button, "#007A4D", "#00A86B")
 
-        # Back button
         self.back_button = tk.Button(self.form_frame, text="Back to Login", font=("Arial", 12),
                                      bg="white", fg="#0047AB", bd=0,
                                      command=lambda: controller.show_frame("LoginFrame"))
         self.back_button.place(x=20, y=390, width=250, height=35)
+        add_hover_effect(self.back_button, "#E0E0E0", "white")
 
     def sign_up(self):
         username = self.username_entry.get()
