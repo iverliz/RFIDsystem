@@ -6,10 +6,10 @@ class MainDashboard(tk.Tk):
         super().__init__()
         self.title("RFID MANAGEMENT SYSTEM - DASHBOARD")
         self.geometry("1350x700+0+0")
-        self.configure(bg="#b2e5ed")  # main background
+        self.configure(bg="#9ABDDC")
 
         # --- SIDEBAR ---
-        self.sidebar = tk.Frame(self, width=250, bg="#87dfe9")
+        self.sidebar = tk.Frame(self, width=250, bg="#E0E0E0")
         self.sidebar.pack(side=tk.LEFT, fill=tk.Y)
         self.sidebar.pack_propagate(False)
 
@@ -23,20 +23,21 @@ class MainDashboard(tk.Tk):
         self.create_menu_button("Reports")
 
         # --- MAIN AREA ---
-        self.main_area = tk.Frame(self, bg="#b2e5ed")
+        self.main_area = tk.Frame(self, bg="#F5F5F5")
         self.main_area.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         # --- TOP BAR ---
-        self.topbar = tk.Frame(self.main_area, height=50, bg="#2ec7c0")
+        self.topbar = tk.Frame(self.main_area, height=50, bg="#0047AB")
         self.topbar.pack(fill="x", side="top")
 
         # LOGOUT BUTTON
         logout_button = tk.Button(
             self.topbar,
             text="Logout",
-            bg="#ff6b6b",
-            activebackground="#ff5252",
-            fg="white",
+            bg="#D9534F",
+            activebackground="#C9302C",
+            activeforeground="#F5F5F5",
+            fg="#F5F5F5",
             relief="flat",
             padx=15,
             pady=5,
@@ -52,17 +53,17 @@ class MainDashboard(tk.Tk):
         btn = tk.Button(
             self.sidebar,
             text=text,
-            bg="#2ec7c0",
-            fg="white",
-            activebackground="#99dde7",
-            activeforeground="white",
+            bg="#1E1E1E",
+            fg="#F5F5F5",
+            activebackground="#333333",
+            activeforeground="#F5F5F5",
             anchor="w",
             relief="flat",
             padx=20,
             pady=15,
             font=("Arial", 12, "bold")
         )
-        btn.pack(fill="x", pady=2)
+        btn.pack(fill="x")
 
     # -----------------------
     # Logout Function
