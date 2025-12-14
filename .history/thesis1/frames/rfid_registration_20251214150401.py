@@ -116,7 +116,7 @@ class RfidRegistration(tk.Frame):
         columns = ("rfid", "fetcher", "student_id", "student", "grade", "teacher")
         self.table = ttk.Treeview(self, columns=columns,
                                   show="headings", height=6)
-        self.table.place(x=200, y=540, width=1200)
+        self.table.place(x=350, y=430, width=900)
 
         for col in columns:
             self.table.heading(col, text=col.replace("_", " ").title())

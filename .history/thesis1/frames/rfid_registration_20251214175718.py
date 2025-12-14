@@ -188,7 +188,7 @@ class RfidRegistration(tk.Frame):
             self.search_entry.insert(0, "Search")
             self.search_entry.config(fg="gray")
 
-    def search(self):
+    def search(self)
         print("Searching:", self.search_var.get())
 
 

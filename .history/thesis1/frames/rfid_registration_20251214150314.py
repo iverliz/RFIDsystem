@@ -102,21 +102,21 @@ class RfidRegistration(tk.Frame):
         btn_y = 470
         tk.Button(self, text="ADD", width=12, font=("Arial", 14, "bold"),
                   bg="#4CAF50", fg="white",
-                  command=self.add_record).place(x=480, y=btn_y)
+                  command=self.add_record).place(x=450, y=630)
 
         tk.Button(self, text="EDIT", width=12, font=("Arial", 14, "bold"),
                   bg="#2196F3", fg="white",
-                  command=self.edit_record).place(x=630, y=btn_y)
+                  command=self.edit_record).place(x=600, y=630)
 
         tk.Button(self, text="DELETE", width=12, font=("Arial", 14, "bold"),
                   bg="#F44336", fg="white",
-                  command=self.delete_record).place(x=780, y=btn_y)
+                  command=self.delete_record).place(x=750, y=630)
 
         # ================= TABLE =================
         columns = ("rfid", "fetcher", "student_id", "student", "grade", "teacher")
         self.table = ttk.Treeview(self, columns=columns,
                                   show="headings", height=6)
-        self.table.place(x=200, y=540, width=1200)
+        self.table.place(x=350, y=430, width=900)
 
         for col in columns:
             self.table.heading(col, text=col.replace("_", " ").title())

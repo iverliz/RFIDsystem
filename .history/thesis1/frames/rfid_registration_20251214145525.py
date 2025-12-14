@@ -25,9 +25,9 @@ class RfidRegistration(tk.Frame):
         tk.Button(self, text="🔍", command=self.search).place(x=260, y=20)
 
         # ================= FETCHER FRAME =================
-        self.fetcher_frame = tk.Frame(self, width=450, height=350,
+        self.fetcher_frame = tk.Frame(self, width=500, height=500,
                                       bg="white", bd=2, relief="groove")
-        self.fetcher_frame.place(x=60, y=90)
+        self.fetcher_frame.place(x=30, y=100)
         self.fetcher_frame.pack_propagate(False)
 
         tk.Label(self.fetcher_frame, text="FETCHER INFORMATION",
@@ -50,20 +50,12 @@ class RfidRegistration(tk.Frame):
         self.name_var = tk.StringVar()
         tk.Entry(self.fetcher_frame, textvariable=self.name_var,
                  font=("Arial", 14), width=30).place(x=90, y=120)
-         # Address
-        tk.Label(self.fetcher_frame, text="Address:", font=("Arial", 14), bg="white").place(x=20, y=160)
-        self.address_var = tk.StringVar()
-        tk.Entry(self.fetcher_frame, textvariable=self.address_var, font=("Arial", 14), width=30).place(x=140, y=160)
-
-        # Contact
-        tk.Label(self.fetcher_frame, text="Contact Number:", font=("Arial", 14), bg="white").place(x=20, y=200)
-        self.contact_var = tk.StringVar()
-        tk.Entry(self.fetcher_frame, textvariable=self.contact_var, font=("Arial", 14), width=30).place(x=170, y=200)
+        
 
         # ================= STUDENT FRAME =================
-        self.student_frame = tk.Frame(self, width=450, height=350,
+        self.student_frame = tk.Frame(self, width=600, height=500,
                                       bg="white", bd=2, relief="groove")
-        self.student_frame.place(x=850, y=90)
+        self.student_frame.place(x=650, y=100)
         self.student_frame.pack_propagate(False)
 
         tk.Label(self.student_frame, text="STUDENT INFORMATION",
@@ -99,24 +91,23 @@ class RfidRegistration(tk.Frame):
                  font=("Arial", 14), width=30).place(x=160, y=200)
 
         # ================= BUTTONS =================
-        btn_y = 470
         tk.Button(self, text="ADD", width=12, font=("Arial", 14, "bold"),
                   bg="#4CAF50", fg="white",
-                  command=self.add_record).place(x=480, y=btn_y)
+                  command=self.add_record).place(x=450, y=630)
 
         tk.Button(self, text="EDIT", width=12, font=("Arial", 14, "bold"),
                   bg="#2196F3", fg="white",
-                  command=self.edit_record).place(x=630, y=btn_y)
+                  command=self.edit_record).place(x=600, y=630)
 
         tk.Button(self, text="DELETE", width=12, font=("Arial", 14, "bold"),
                   bg="#F44336", fg="white",
-                  command=self.delete_record).place(x=780, y=btn_y)
+                  command=self.delete_record).place(x=750, y=630)
 
         # ================= TABLE =================
         columns = ("rfid", "fetcher", "student_id", "student", "grade", "teacher")
         self.table = ttk.Treeview(self, columns=columns,
                                   show="headings", height=6)
-        self.table.place(x=200, y=540, width=1200)
+        self.table.place(x=350, y=430, width=900)
 
         for col in columns:
             self.table.heading(col, text=col.replace("_", " ").title())
