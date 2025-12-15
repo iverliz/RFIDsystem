@@ -101,7 +101,7 @@ class RfidRegistration(tk.Frame):
         try:
             conn = db_connect()
             cursor = conn.cursor()
-            cursor.execute("SELECT rfid, fetcher_name, student_id, student_name, grade, teacher FROM registrations")
+            cursor.execute("SELECT rfid, fetcher_name, student_id, student_name, grade, teacher FROM recoed")
             rows = cursor.fetchall()
             for row in rows:
                 self.table.insert("", "end", values=row)
@@ -116,7 +116,7 @@ class RfidRegistration(tk.Frame):
             conn = db_connect()
             cursor = conn.cursor()
             sql = """
-            INSERT INTO registrations
+            INSERT INTO record
             (rfid, fetcher_name, address, contact, student_id, student_name, grade, teacher)
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
             """

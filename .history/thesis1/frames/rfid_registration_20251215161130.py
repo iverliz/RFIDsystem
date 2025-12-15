@@ -101,7 +101,7 @@ class RfidRegistration(tk.Frame):
         try:
             conn = db_connect()
             cursor = conn.cursor()
-            cursor.execute("SELECT rfid, fetcher_name, student_id, student_name, grade, teacher FROM registrations")
+            cursor.execute("SELECT rfid, fetcher_name, student_id, student_name, grade, teacher FROM record")
             rows = cursor.fetchall()
             for row in rows:
                 self.table.insert("", "end", values=row)
@@ -116,7 +116,7 @@ class RfidRegistration(tk.Frame):
             conn = db_connect()
             cursor = conn.cursor()
             sql = """
-            INSERT INTO registrations
+            INSERT INTO record
             (rfid, fetcher_name, address, contact, student_id, student_name, grade, teacher)
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
             """
@@ -145,7 +145,7 @@ class RfidRegistration(tk.Frame):
             conn = db_connect()
             cursor = conn.cursor()
             sql = """
-            UPDATE registrations SET
+            UPDATE record SET
             fetcher_name=%s, address=%s, contact=%s,
             student_id=%s, student_name=%s, grade=%s, teacher=%s
             WHERE rfid=%s
@@ -172,7 +172,7 @@ class RfidRegistration(tk.Frame):
         try:
             conn = db_connect()
             cursor = conn.cursor()
-            cursor.execute("DELETE FROM registrations WHERE rfid=%s", (self.rfid_var.get(),))
+            cursor.execute("DELETE FROM record WHERE rfid=%s", (self.rfid_var.get(),))
             conn.commit()
             self.load_data()
             self.clear_fields()

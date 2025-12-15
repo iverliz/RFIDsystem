@@ -116,7 +116,7 @@ class RfidRegistration(tk.Frame):
             conn = db_connect()
             cursor = conn.cursor()
             sql = """
-            INSERT INTO registrations
+            INSERT INTO record
             (rfid, fetcher_name, address, contact, student_id, student_name, grade, teacher)
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
             """

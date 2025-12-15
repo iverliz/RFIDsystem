@@ -1,13 +1,6 @@
 import tkinter as tk
 from tkinter import messagebox, ttk
-
-import sys
-import os
-
-# Add the parent directory of 'frames' to sys.path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from utils.database import db_connect
-
+from util.sdatabase import db_connect
 
 class RfidRegistration(tk.Frame):
     def __init__(self, root):
@@ -105,11 +98,10 @@ class RfidRegistration(tk.Frame):
             rows = cursor.fetchall()
             for row in rows:
                 self.table.insert("", "end", values=row)
-        except Exception as e:
-            messagebox.showerror("Database Error", str(e))
-        finally:
             cursor.close()
             conn.close()
+        except Exception as e:
+            messagebox.showerror("Database Error", str(e))
 
     def add_record(self):
         try:
@@ -127,14 +119,13 @@ class RfidRegistration(tk.Frame):
             )
             cursor.execute(sql, values)
             conn.commit()
+            cursor.close()
+            conn.close()
             messagebox.showinfo("Success", "Record added successfully")
             self.load_data()
             self.clear_fields()
         except Exception as e:
             messagebox.showerror("Database Error", str(e))
-        finally:
-            cursor.close()
-            conn.close()
 
     def edit_record(self):
         item = self.table.focus()
@@ -157,13 +148,12 @@ class RfidRegistration(tk.Frame):
             )
             cursor.execute(sql, values)
             conn.commit()
+            cursor.close()
+            conn.close()
             self.load_data()
             self.clear_fields()
         except Exception as e:
             messagebox.showerror("Database Error", str(e))
-        finally:
-            cursor.close()
-            conn.close()
 
     def delete_record(self):
         if not self.rfid_var.get():
@@ -174,13 +164,12 @@ class RfidRegistration(tk.Frame):
             cursor = conn.cursor()
             cursor.execute("DELETE FROM registrations WHERE rfid=%s", (self.rfid_var.get(),))
             conn.commit()
+            cursor.close()
+            conn.close()
             self.load_data()
             self.clear_fields()
         except Exception as e:
             messagebox.showerror("Database Error", str(e))
-        finally:
-            cursor.close()
-            conn.close()
 
     # ================= TREEVIEW & FIELDS =================
     def load_selected(self, event):
@@ -226,12 +215,10 @@ class RfidRegistration(tk.Frame):
             cursor.execute(sql, (value, value, value))
             for row in cursor.fetchall():
                 self.table.insert("", "end", values=row)
-        except Exception as e:
-            messagebox.showerror("Database Error", str(e))
-        finally:
             cursor.close()
             conn.close()
-
+        except Exception as e:
+            messagebox.showerror("Database Error", str(e))
 
 if __name__ == "__main__":
     root = tk.Tk()

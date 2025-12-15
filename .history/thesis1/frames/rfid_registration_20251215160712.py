@@ -1,11 +1,5 @@
 import tkinter as tk
 from tkinter import messagebox, ttk
-
-import sys
-import os
-
-# Add the parent directory of 'frames' to sys.path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from utils.database import db_connect
 
 
