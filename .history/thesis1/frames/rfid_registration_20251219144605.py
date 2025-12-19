@@ -2,7 +2,6 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 import sys
 import os
-import mysql.connector
 
 # Add parent directory
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
