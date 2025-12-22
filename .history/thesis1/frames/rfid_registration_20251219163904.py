@@ -2,11 +2,9 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 import sys
 import os
-
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(BASE_DIR)
-
-from utils.database import db_connect
+import mysql.connector
+from mysql.connector import Error
+from mysql.connector import errorcode
 
 
 
@@ -384,4 +382,5 @@ class RfidRegistration(tk.Frame):
                 cursor.close()
             if conn:
                 conn.close()
+
 

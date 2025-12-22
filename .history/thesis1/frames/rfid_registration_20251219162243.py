@@ -2,12 +2,11 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 import sys
 import os
+import mysql.connector
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(BASE_DIR)
-
+# Add parent directory
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from utils.database import db_connect
-
 
 
 class RfidRegistration(tk.Frame):
@@ -385,3 +384,8 @@ class RfidRegistration(tk.Frame):
             if conn:
                 conn.close()
 
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = RfidRegistration(root)
+    root.mainloop()

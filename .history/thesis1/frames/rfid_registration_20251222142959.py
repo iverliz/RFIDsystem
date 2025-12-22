@@ -385,3 +385,8 @@ class RfidRegistration(tk.Frame):
             if conn:
                 conn.close()
 
+
+if __name__ == "__main__":
+    
+    app = RfidRegistration(root)
+    root.mainloop()

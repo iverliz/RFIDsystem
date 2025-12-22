@@ -10,6 +10,8 @@ from utils.database import db_connect
 
 
 
+
+
 class RfidRegistration(tk.Frame):
     def __init__(self, root):
         super().__init__(root, bg="#b2e5ed")
@@ -385,3 +387,8 @@ class RfidRegistration(tk.Frame):
             if conn:
                 conn.close()
 
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = RfidRegistration(root)
+    root.mainloop()
