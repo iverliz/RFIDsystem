@@ -147,7 +147,7 @@ class SignUpFrame(tk.Frame):
 
         if password != confirm_password:
             messagebox.showerror("Error", "Passwords do not match!")
-            return
+            
 
         messagebox.showinfo("Sign Up Info", f"Username: {username}\nPassword: {password}")
 

@@ -18,6 +18,7 @@ class Rfid(tk.Tk):
         frame.pack(fill="both", expand=True)
 
 
+
 if __name__ == "__main__":
     app = Rfid()
     app.mainloop()
