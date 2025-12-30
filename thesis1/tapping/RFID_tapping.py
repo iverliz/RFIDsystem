@@ -39,6 +39,7 @@ class SerialThread(QThread):
 
 # ---------------- MAIN WINDOW ----------------
 class RFIDTapping(QMainWindow):
+
     def __init__(self):
         super().__init__()
 
@@ -95,6 +96,10 @@ class RFIDTapping(QMainWindow):
         self.serial_thread.uid_scanned.connect(self.process_rfid)
         self.serial_thread.start()
 
+        self.pairing_timer = QTimer()
+        self.pairing_timer.setSingleShot(True)
+        self.pairing_timer.timeout.connect(self.pairing_timeout)
+
         self.reset_system()
 
     # ---------------- DATABASE ----------------
@@ -113,25 +118,30 @@ class RFIDTapping(QMainWindow):
     # ---------------- PERSON PANEL ----------------
     def create_person_panel(self, title, color):
         frame = QFrame()
+        frame.setStyleSheet("background:white;")
         layout = QVBoxLayout(frame)
+        layout.setSpacing(10)
 
         lbl = QLabel(title)
         lbl.setAlignment(Qt.AlignCenter)
-        lbl.setFont(QFont("Segoe UI", 14, QFont.Bold))
-        lbl.setStyleSheet(f"background:{color};color:white;padding:6px;")
+        lbl.setFont(QFont("Segoe UI", 15, QFont.Bold))
+        lbl.setStyleSheet(f"background:{color};color:white;padding:8px;")
         layout.addWidget(lbl)
 
         img = QLabel()
         img.setAlignment(Qt.AlignCenter)
+        img.setFixedHeight(170)
         layout.addWidget(img)
 
         name = QLabel("WAITING")
         name.setAlignment(Qt.AlignCenter)
-        name.setFont(QFont("Segoe UI", 12, QFont.Bold))
+        name.setFont(QFont("Segoe UI", 14, QFont.Bold))
         layout.addWidget(name)
 
         info = QLabel("")
         info.setAlignment(Qt.AlignCenter)
+        info.setFont(QFont("Segoe UI", 12))   # 👈 bigger & clean
+        info.setWordWrap(True)
         layout.addWidget(info)
 
         frame.image = img
@@ -148,6 +158,10 @@ class RFIDTapping(QMainWindow):
 
     # ---------------- RFID PROCESS ----------------
     def process_rfid(self, uid):
+        # 🚫 Ignore scans during reset delay
+        if self.status_label.text() in ["AUTHORIZED", "DENIED"]:
+            return
+
         if self.stage == "fetcher":
             self.fetcher_rfid = uid
             self.cursor.execute("SELECT * FROM fetcher WHERE rfid=%s", (uid,))
@@ -159,9 +173,17 @@ class RFIDTapping(QMainWindow):
                 return
 
             self.update_fetcher_panel()
+            self.set_status("FETCHER VERIFIED – WAITING FOR STUDENT", "#2563eb")
+
             self.stage = "student"
 
+            # ⏱ START 10-SECOND TIMEOUT
+            self.pairing_timer.start(10000)
+
         else:
+            # ✅ Student scanned in time → stop timeout
+            self.pairing_timer.stop()
+
             self.student_rfid = uid
             self.cursor.execute(
                 "SELECT * FROM student WHERE Student_id=%s", (uid,)
@@ -175,6 +197,7 @@ class RFIDTapping(QMainWindow):
 
             self.update_student_panel()
             self.verify_pair()
+
 
     # ---------------- VERIFY PAIR ----------------
     def verify_pair(self):
@@ -210,17 +233,21 @@ class RFIDTapping(QMainWindow):
         self.fetcher_panel.image.setPixmap(
             self.load_photo(self.fetcher_data.get("photo_path"))
         )
+        self.fetcher_panel.name.setFont(QFont("Segoe UI", 14, QFont.Bold))
         self.fetcher_panel.name.setText(self.fetcher_data["Fetcher_name"])
 
     def update_student_panel(self):
         self.student_panel.image.setPixmap(
             self.load_photo(self.student_data.get("photo_path"))
         )
+
         self.student_panel.name.setText(self.student_data["Student_name"])
+
+        # ✅ CLEAN VERTICAL DISPLAY
         self.student_panel.info.setText(
-            f"Grade Level: {self.student_data['grade_lvl']}\n"
-            f"Teacher: {self.student_data['Teacher_name']}\n"
-            f"Student ID: {self.student_data['Student_id']}"
+            f"Student ID: {self.student_data['Student_id']}\n\n"
+            f"Grade Level: {self.student_data['grade_lvl']}\n\n"
+            f"Teacher: {self.student_data['Teacher_name']}"
         )
 
     def set_status(self, text, color):
@@ -231,6 +258,8 @@ class RFIDTapping(QMainWindow):
 
     # ---------------- RESET ----------------
     def reset_system(self):
+        self.pairing_timer.stop()
+
         self.stage = "fetcher"
         self.fetcher_rfid = None
         self.student_rfid = None
@@ -239,10 +268,15 @@ class RFIDTapping(QMainWindow):
 
         for panel in (self.fetcher_panel, self.student_panel):
             panel.image.setPixmap(default_pix)
-            panel.name.setText("WAITING...")
+            panel.name.setText("WAITING")
             panel.info.setText("")
 
-        self.set_status("WAITING FOR RFID...", "#6b7280")
+        self.set_status("WAITING FOR RFID", "#6b7280")
+
+    # ---------------- TIMEOUT HANDLER ----------------
+    def pairing_timeout(self):
+        self.set_status("TIMEOUT – NO STUDENT SCANNED", "#dc2626")
+        QTimer.singleShot(1500, self.reset_system)
 
 # ---------------- RUN ----------------
 if __name__ == "__main__":
