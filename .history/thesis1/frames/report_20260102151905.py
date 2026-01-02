@@ -129,12 +129,12 @@ class Report(tk.Frame):
 
     def get_students(self):
         return self.fetch_data(
-            "SELECT ID, Student_name, grade_lvl, created_at FROM student"
+            "SELECT ID, Student_name, Grade_lvl, date_added FROM student"
         )
 
     def get_teachers(self):
         return self.fetch_data(
-            "SELECT ID, Teacher_name, created_at FROM teacher"
+            "SELECT ID, Teacher_name, created_At FROM teacher"
         )
 
     def get_fetchers(self):

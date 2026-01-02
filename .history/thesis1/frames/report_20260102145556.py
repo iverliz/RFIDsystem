@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
-from datetime import datetime
+from datetime import datetime, date
 import csv
 import os
 import sys
@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
 
-from utils.database import db_connect
+from utils.database import db_connect   # ✅ correct import
 
 
 class Report(tk.Frame):
@@ -31,6 +31,7 @@ class Report(tk.Frame):
         root.geometry("1350x700+0+0")
         self.pack(fill="both", expand=True)
 
+        # ================= TITLE =================
         tk.Label(
             self, text="DATE-BASED REPORTS",
             font=("Arial", 24, "bold"),
@@ -62,18 +63,13 @@ class Report(tk.Frame):
         table_frame.pack()
 
         self.student_table = self.create_table(
-            table_frame, "STUDENTS",
-            ["ID", "Name", "Grade Level", "Date"], 0, 0
+            table_frame, "STUDENTS", ["", "Name", "Date"], 0, 0
         )
-
         self.teacher_table = self.create_table(
-            table_frame, "TEACHERS",
-            ["ID", "Name", "Date"], 0, 1
+            table_frame, "TEACHERS", ["ID", "Name", "Date"], 0, 1
         )
-
         self.fetcher_table = self.create_table(
-            table_frame, "FETCHERS",
-            ["ID", "Fetcher Name", "Contact", "Date"], 1, 0, colspan=2
+            table_frame, "FETCHERS", ["RFID", "Name", "Date"], 1, 0, colspan=2
         )
 
         # ================= ACTION BUTTONS =================
@@ -128,19 +124,13 @@ class Report(tk.Frame):
         return data
 
     def get_students(self):
-        return self.fetch_data(
-            "SELECT ID, Student_name, grade_lvl, created_at FROM student"
-        )
+        return self.fetch_data("SELECT ID, Student_name,grade_lvl, date FROM student")
 
     def get_teachers(self):
-        return self.fetch_data(
-            "SELECT ID, Teacher_name, created_at FROM teacher"
-        )
+        return self.fetch_data("SELECT ID, Teeacher_name,Teacher_grade, date FROM teacher")
 
     def get_fetchers(self):
-        return self.fetch_data(
-            "SELECT ID, fetcher_name, contact, created_at FROM fetcher"
-        )
+        return self.fetch_data("SELECT ID, fetcher_name, contact, date FROM fetcher")
 
     # ================= DATE FILTER =================
     def apply_filter(self):
@@ -158,7 +148,9 @@ class Report(tk.Frame):
         count = 0
         for row in data:
             d = row[-1]
-            if isinstance(d, str):
+            if isinstance(d, datetime):
+                d = d.date()
+            elif isinstance(d, str):
                 d = datetime.strptime(d, "%Y-%m-%d").date()
 
             if f <= d <= t:

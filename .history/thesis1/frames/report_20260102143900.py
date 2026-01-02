@@ -2,8 +2,6 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from datetime import datetime
 import csv
-import os
-import sys
 
 # Excel
 from openpyxl import Workbook
@@ -15,11 +13,11 @@ from reportlab.pdfgen import canvas
 # Chart
 import matplotlib.pyplot as plt
 
-# ================= DATABASE CONNECTION =================
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(BASE_DIR)
+# DATABASE
+import mysql.connector
 
-from utils.database import db_connect
+
+# ================= DATABASE CONNECTION =================
 
 
 class Report(tk.Frame):
@@ -31,6 +29,7 @@ class Report(tk.Frame):
         root.geometry("1350x700+0+0")
         self.pack(fill="both", expand=True)
 
+        # ================= TITLE =================
         tk.Label(
             self, text="DATE-BASED REPORTS",
             font=("Arial", 24, "bold"),
@@ -62,18 +61,13 @@ class Report(tk.Frame):
         table_frame.pack()
 
         self.student_table = self.create_table(
-            table_frame, "STUDENTS",
-            ["ID", "Name", "Grade Level", "Date"], 0, 0
+            table_frame, "STUDENTS", ["ID", "Name", "Date"], 0, 0
         )
-
         self.teacher_table = self.create_table(
-            table_frame, "TEACHERS",
-            ["ID", "Name", "Date"], 0, 1
+            table_frame, "TEACHERS", ["ID", "Name", "Date"], 0, 1
         )
-
         self.fetcher_table = self.create_table(
-            table_frame, "FETCHERS",
-            ["ID", "Fetcher Name", "Contact", "Date"], 1, 0, colspan=2
+            table_frame, "FETCHERS", ["RFID", "Name", "Date"], 1, 0, colspan=2
         )
 
         # ================= ACTION BUTTONS =================
@@ -96,6 +90,7 @@ class Report(tk.Frame):
             command=self.show_chart
         ).grid(row=0, column=1, padx=10)
 
+        # LOAD DATA INITIALLY
         self.apply_filter()
 
     # ================= TABLE CREATOR =================
@@ -103,7 +98,11 @@ class Report(tk.Frame):
         frame = tk.Frame(parent, bg="white", bd=2, relief="groove")
         frame.grid(row=r, column=c, columnspan=colspan, padx=10, pady=10)
 
-        tk.Label(frame, text=title, font=("Arial", 16, "bold"), bg="white").pack()
+        tk.Label(
+            frame, text=title,
+            font=("Arial", 16, "bold"),
+            bg="white"
+        ).pack()
 
         tree = ttk.Treeview(frame, columns=columns, show="headings", height=7)
         tree.pack(padx=10, pady=5)
@@ -113,42 +112,46 @@ class Report(tk.Frame):
             tree.column(col, width=160)
 
         tree.count_var = tk.StringVar(value="Total: 0")
-        tk.Label(frame, textvariable=tree.count_var,
-                 font=("Arial", 11, "bold"), bg="white", fg="#0047AB").pack()
+        tk.Label(
+            frame, textvariable=tree.count_var,
+            font=("Arial", 11, "bold"),
+            bg="white", fg="#0047AB"
+        ).pack()
 
         return tree
 
     # ================= DATABASE FETCH =================
-    def fetch_data(self, query):
-        conn = db_connect()
+    def get_students(self):
+        conn = get_connection()
         cur = conn.cursor()
-        cur.execute(query)
+        cur.execute("SELECT id, name, date FROM students")
         data = cur.fetchall()
         conn.close()
         return data
 
-    def get_students(self):
-        return self.fetch_data(
-            "SELECT ID, Student_name, grade_lvl, created_at FROM student"
-        )
-
     def get_teachers(self):
-        return self.fetch_data(
-            "SELECT ID, Teacher_name, created_at FROM teacher"
-        )
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT id, name, date FROM teachers")
+        data = cur.fetchall()
+        conn.close()
+        return data
 
     def get_fetchers(self):
-        return self.fetch_data(
-            "SELECT ID, fetcher_name, contact, created_at FROM fetcher"
-        )
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT rfid, name, date FROM fetchers")
+        data = cur.fetchall()
+        conn.close()
+        return data
 
     # ================= DATE FILTER =================
     def apply_filter(self):
         for table in (self.student_table, self.teacher_table, self.fetcher_table):
             table.delete(*table.get_children())
 
-        f = datetime.strptime(self.from_date.get(), "%Y-%m-%d").date()
-        t = datetime.strptime(self.to_date.get(), "%Y-%m-%d").date()
+        f = datetime.strptime(self.from_date.get(), "%Y-%m-%d")
+        t = datetime.strptime(self.to_date.get(), "%Y-%m-%d")
 
         self.fill(self.student_table, self.get_students(), f, t)
         self.fill(self.teacher_table, self.get_teachers(), f, t)
@@ -157,9 +160,11 @@ class Report(tk.Frame):
     def fill(self, table, data, f, t):
         count = 0
         for row in data:
-            d = row[-1]
-            if isinstance(d, str):
-                d = datetime.strptime(d, "%Y-%m-%d").date()
+            date_val = row[-1]
+            if isinstance(date_val, str):
+                d = datetime.strptime(date_val, "%Y-%m-%d")
+            else:
+                d = date_val
 
             if f <= d <= t:
                 table.insert("", "end", values=row)
@@ -185,34 +190,33 @@ class Report(tk.Frame):
             tk.Radiobutton(win, text=v.upper(), variable=fmt, value=v).pack()
 
         tk.Button(
-            win, text="Export", bg="#4CAF50", fg="white",
+            win, text="Export",
+            bg="#4CAF50", fg="white",
             command=lambda: self.export(choice.get(), fmt.get(), win)
         ).pack(pady=10)
 
     def export(self, choice, fmt, win):
-        table = {
+        tables = {
             "students": self.student_table,
             "teachers": self.teacher_table,
             "fetchers": self.fetcher_table
-        }[choice]
+        }
 
+        table = tables[choice]
         path = filedialog.asksaveasfilename(defaultextension=f".{fmt}")
         if not path:
             return
 
-        headers = table["columns"]
         rows = [table.item(i, "values") for i in table.get_children()]
 
         if fmt == "csv":
             with open(path, "w", newline="") as f:
-                writer = csv.writer(f)
-                writer.writerow(headers)
-                writer.writerows(rows)
+                csv.writer(f).writerows(rows)
 
         elif fmt == "excel":
             wb = Workbook()
             ws = wb.active
-            ws.append(headers)
+            ws.append(table["columns"])
             for r in rows:
                 ws.append(r)
             wb.save(path)
@@ -220,12 +224,7 @@ class Report(tk.Frame):
         elif fmt == "pdf":
             pdf = canvas.Canvas(path, pagesize=letter)
             y = 750
-            pdf.drawString(40, y, " | ".join(headers))
-            y -= 30
             for r in rows:
-                if y < 50:
-                    pdf.showPage()
-                    y = 750
                 pdf.drawString(40, y, " | ".join(map(str, r)))
                 y -= 20
             pdf.save()
@@ -242,7 +241,7 @@ class Report(tk.Frame):
             len(self.fetcher_table.get_children())
         ]
 
-        plt.bar(labels, values, color=["#2196F3", "#4CAF50", "#FF9800"])
+        plt.bar(labels, values)
         plt.title("Total Records")
         plt.ylabel("Count")
         plt.show()
@@ -250,5 +249,5 @@ class Report(tk.Frame):
 
 if __name__ == "__main__":
     root = tk.Tk()
-    Report(root)
+    app = Report(root)
     root.mainloop()
