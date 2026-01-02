@@ -184,7 +184,7 @@ class RfidRegistration(tk.Frame):
                 self.name_var.get(),
                 self.student_rfid_var.get(),
                 self.address_var.get(),
-                (self.contact_var.get()),
+                int(self.contact_var.get()) if self.contact_var.get() else None,
                 self.student_id_var.get(),
                 self.student_name_var.get(),
                 self.grade_var.get(),
@@ -302,4 +302,3 @@ if __name__ == "__main__":
     root = tk.Tk()
     RfidRegistration(root)
     root.mainloop()  # ✅ Corrected
- 
