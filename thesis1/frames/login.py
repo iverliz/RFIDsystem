@@ -10,6 +10,8 @@ sys.path.append(BASE_DIR)
 
 from utils.database import db_connect
 
+SESSION_FILE = "session.txt"
+
 
 # ================= BUTTON HOVER =================
 def add_hover_effect(button, hover_bg, default_bg):
@@ -22,7 +24,6 @@ class LoginFrame(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent, bg="#F5F5F5")
         self.controller = controller
-
         self.left_image()
         self.login_panel()
 
@@ -52,17 +53,20 @@ class LoginFrame(tk.Frame):
         self.username.place(x=20, y=120, width=250, height=35)
 
         tk.Label(panel, text="Password", bg="white").place(x=20, y=170)
-        self.password = tk.Entry(panel, font=("Arial", 14),
-                                 bg="#F0F0F0", bd=0, show="*")
+        self.password = tk.Entry(panel, font=("Arial", 14), bg="#F0F0F0", bd=0, show="*")
         self.password.place(x=20, y=200, width=250, height=35)
 
-        btn = tk.Button(panel, text="Login", bg="#0047AB", fg="white",
-                        font=("Arial", 14, "bold"), command=self.login)
+        btn = tk.Button(
+            panel, text="Login", bg="#0047AB", fg="white",
+            font=("Arial", 14, "bold"), command=self.login
+        )
         btn.place(x=20, y=260, width=250, height=45)
         add_hover_effect(btn, "#003380", "#0047AB")
 
-        su = tk.Button(panel, text="Sign Up", bg="#00A86B", fg="white",
-                       command=lambda: self.controller.show_frame("SignUpFrame"))
+        su = tk.Button(
+            panel, text="Sign Up", bg="#00A86B", fg="white",
+            command=lambda: self.controller.show_frame("SignUpFrame")
+        )
         su.place(x=20, y=320, width=120, height=35)
         add_hover_effect(su, "#007A4D", "#00A86B")
 
@@ -86,8 +90,11 @@ class LoginFrame(tk.Frame):
         conn.close()
 
         if result:
+            with open(SESSION_FILE, "w") as f:
+                f.write("logged_in")
+
             messagebox.showinfo("Success", "Login Successful")
-            # open dashboard here
+            self.controller.show_frame("MainDashboard")
         else:
             messagebox.showerror("Error", "Invalid login")
 
@@ -97,7 +104,6 @@ class SignUpFrame(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent, bg="#F5F5F5")
         self.controller = controller
-
         self.left_image()
         self.signup_panel()
 
@@ -106,17 +112,15 @@ class SignUpFrame(tk.Frame):
         left.pack(side=tk.LEFT)
         left.pack_propagate(False)
 
-        BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        img_path = os.path.join(BASE_DIR, "assets", "icon", "ccclogo.jpg")        
-        img_path = os.path.normpath(img_path)
-
+        img_path = os.path.join(os.path.dirname(__file__), "assets", "icon", "ccclogo.jpg")
         if not os.path.exists(img_path):
             tk.Label(left, text="Image not found").pack()
-            return 
-        
+            return
+
         img = Image.open(img_path).resize((675, 700))
         self.photo = ImageTk.PhotoImage(img)
         tk.Label(left, image=self.photo).pack(fill=tk.BOTH, expand=True)
+
     def signup_panel(self):
         panel = tk.Frame(self, width=400, height=500, bg="white", bd=2, relief="groove")
         panel.place(x=875, y=100)
@@ -129,20 +133,24 @@ class SignUpFrame(tk.Frame):
         self.password = self.entry(panel, "Password", 170, True)
         self.confirm = self.entry(panel, "Confirm Password", 250, True)
 
-        btn = tk.Button(panel, text="Sign Up", bg="#00A86B", fg="white",
-                        font=("Arial", 14, "bold"), command=self.signup)
+        btn = tk.Button(
+            panel, text="Sign Up", bg="#00A86B", fg="white",
+            font=("Arial", 14, "bold"), command=self.signup
+        )
         btn.place(x=20, y=330, width=250, height=45)
         add_hover_effect(btn, "#007A4D", "#00A86B")
 
-        back = tk.Button(panel, text="Back to Login",
-                         command=lambda: self.controller.show_frame("LoginFrame"))
+        back = tk.Button(
+            panel, text="Back to Login",
+            command=lambda: self.controller.show_frame("LoginFrame")
+        )
         back.place(x=20, y=390, width=250, height=35)
 
     def entry(self, panel, text, y, hide=False):
         tk.Label(panel, text=text, bg="white").place(x=20, y=y)
-        e = tk.Entry(panel, font=("Arial", 14), bg="#F0F0F0",
-                     bd=0, show="*" if hide else "")
-        e.place(x=20, y=y+30, width=250, height=35)
+        e = tk.Entry(panel, font=("Arial", 14), bg="#F0F0F0", bd=0,
+                     show="*" if hide else "")
+        e.place(x=20, y=y + 30, width=250, height=35)
         return e
 
     def signup(self):
@@ -153,7 +161,6 @@ class SignUpFrame(tk.Frame):
         if not user or not pw:
             messagebox.showerror("Error", "All fields required")
             return
-
         if pw != cpw:
             messagebox.showerror("Error", "Passwords do not match")
             return
@@ -172,32 +179,5 @@ class SignUpFrame(tk.Frame):
 
             messagebox.showinfo("Success", "Account created")
             self.controller.show_frame("LoginFrame")
-
         except:
             messagebox.showerror("Error", "Username already exists")
-
-
-# ================= APP CONTROLLER =================
-class App(tk.Tk):
-    def __init__(self):
-        super().__init__()
-        self.title("RFID MANAGEMENT SYSTEM")
-        self.geometry("1350x700+0+0")
-
-        container = tk.Frame(self)
-        container.pack(fill="both", expand=True)
-
-        self.frames = {}
-        for F in (LoginFrame, SignUpFrame):
-            frame = F(container, self)
-            self.frames[F.__name__] = frame
-            frame.place(relwidth=1, relheight=1)
-
-        self.show_frame("LoginFrame")
-
-    def show_frame(self, name):
-        self.frames[name].tkraise()
-
-
-if __name__ == "__main__":
-    App().mainloop()
