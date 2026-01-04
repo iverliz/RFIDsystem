@@ -74,11 +74,11 @@ class MainDashboard(tk.Frame):
             fg="white",
             anchor="w",
             relief="flat",
-            padx=20,
-            pady=15,
-            font=("Arial", 12, "bold"),
+            padx=10,
+            pady=5,
+            font=("Arial", 9, "bold"),
             command=lambda: self.open_frame(frame_class)
-        ).pack(fill="x", pady=2)
+        ).pack(fill="x", pady=1)
 
     # ================= LOGOUT =================
     def logout(self):

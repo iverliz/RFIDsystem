@@ -13,6 +13,9 @@ SESSION_FILE = "session.txt"
 
 
 class MainDashboard(tk.Frame):
+    NORMAL_BG = "#2ec7c0"
+    ACTIVE_BG = "#1aa39a"
+
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
@@ -22,6 +25,7 @@ class MainDashboard(tk.Frame):
 
         # ================= CURRENT PAGE =================
         self.current_frame = None
+        self.active_button = None
 
         # ================= SIDEBAR =================
         self.sidebar = tk.Frame(self, width=250, bg="#87dfe9")
@@ -49,47 +53,66 @@ class MainDashboard(tk.Frame):
             text="Logout",
             bg="#ff6b6b",
             fg="white",
-            font=("Arial", 12, "bold"),
-            command=self.logout 
-        ).pack(side="right", padx=20, pady=10)
+            font=("Arial", 11, "bold"),
+            padx=15,
+            pady=5,
+            command=self.logout
+        ).pack(side="right", padx=20, pady=8)
 
-        
+        # ================= DEFAULT PAGE =================
         self.open_frame(StudentRecord)
 
-    
+    # ================= PAGE LOADER =================
     def open_frame(self, frame_class):
         if self.current_frame is not None:
             self.current_frame.destroy()
 
-       
         self.current_frame = frame_class(self.main_area, self.controller)
         self.current_frame.pack(fill="both", expand=True)
 
-    
+    # ================= SIDEBAR BUTTON =================
     def create_menu_button(self, text, frame_class):
-        tk.Button(
+        btn = tk.Button(
             self.sidebar,
             text=text,
-            bg="#2ec7c0",
+            bg=self.NORMAL_BG,
             fg="white",
             anchor="w",
             relief="flat",
-            padx=20,
-            pady=15,
-            font=("Arial", 12, "bold"),
-            command=lambda: self.open_frame(frame_class)
-        ).pack(fill="x", pady=2)
+            padx=15,
+            pady=8,
+            font=("Arial", 10, "bold"),
+            command=lambda b=text: self.on_menu_click(b, frame_class)
+        )
+        btn.pack(fill="x", pady=1)
+
+        # Set first button as active by default
+        if self.active_button is None:
+            self.active_button = btn
+            btn.config(bg=self.ACTIVE_BG)
+
+    # ================= MENU CLICK HANDLER =================
+    def on_menu_click(self, button_text, frame_class):
+        # Reset old active button
+        if self.active_button:
+            self.active_button.config(bg=self.NORMAL_BG)
+
+        # Find the clicked button and activate it
+        for widget in self.sidebar.winfo_children():
+            if isinstance(widget, tk.Button) and widget["text"] == button_text:
+                widget.config(bg=self.ACTIVE_BG)
+                self.active_button = widget
+                break
+
+        self.open_frame(frame_class)
 
     # ================= LOGOUT =================
     def logout(self):
-        # Remove session file
         if os.path.exists(SESSION_FILE):
             os.remove(SESSION_FILE)
 
-        # Clear login fields
         login_frame = self.controller.frames["LoginFrame"]
         login_frame.username.delete(0, tk.END)
         login_frame.password.delete(0, tk.END)
 
-        # Go back to login screen
         self.controller.show_frame("LoginFrame")

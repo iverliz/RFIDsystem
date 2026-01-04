@@ -74,8 +74,8 @@ class MainDashboard(tk.Frame):
             fg="white",
             anchor="w",
             relief="flat",
-            padx=20,
-            pady=15,
+            padx=10,
+            pady=5,
             font=("Arial", 12, "bold"),
             command=lambda: self.open_frame(frame_class)
         ).pack(fill="x", pady=2)

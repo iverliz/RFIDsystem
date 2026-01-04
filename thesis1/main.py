@@ -26,7 +26,6 @@ class Rfid(tk.Tk):
 
         self.frames = {}
 
-        # REGISTER ALL FRAMES
         for FrameClass in (
             LoginFrame,
             SignUpFrame,
@@ -43,27 +42,23 @@ class Rfid(tk.Tk):
             self.frames[FrameClass.__name__] = frame
             frame.place(relwidth=1, relheight=1)
 
-        # SHOW FIRST SCREEN
+        # Initial screen
         if os.path.exists(SESSION_FILE):
             self.show_frame("MainDashboard")
         else:
             self.show_frame("LoginFrame")
 
-    # ------------------- SHOW FRAME -------------------
     def show_frame(self, name):
-        """
-        Raises a frame to the front. 
-        Forces login if the user tries to access protected frames without being logged in.
-        """
-        # Force login if session does not exist
-        if name != "LoginFrame" and not os.path.exists(SESSION_FILE):
+        # Allow Login & SignUp without session
+        if name not in ("LoginFrame", "SignUpFrame") and not os.path.exists(SESSION_FILE):
             name = "LoginFrame"
 
-        # Clear login fields when showing LoginFrame
         if name == "LoginFrame":
-            login_frame = self.frames["LoginFrame"]
-            login_frame.username.delete(0, tk.END)
-            login_frame.password.delete(0, tk.END)
+            frame = self.frames["LoginFrame"]
+            if hasattr(frame, "username"):
+                frame.username.delete(0, tk.END)
+            if hasattr(frame, "password"):
+                frame.password.delete(0, tk.END)
 
         self.frames[name].tkraise()
 

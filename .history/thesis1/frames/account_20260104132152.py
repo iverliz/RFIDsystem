@@ -13,57 +13,33 @@ class Account(tk.Frame):
     def __init__(self, parent, controller=None):
         super().__init__(parent, bg="#b2e5ed")
         self.controller = controller
-        self.pack(fill="both", expand=True)
-
-        # ================= HEADER =================
-        header = tk.Frame(self, bg="#0047AB", height=90)
-        header.pack(fill="x")
-
-        tk.Label(
-            header,
-            text="ACCOUNT INFORMATION",
-            font=("Arial", 24, "bold"),
-            bg="#0047AB",
-            fg="white"
-        ).pack(side="left", padx=30, pady=25)
-
-        # ================= MAIN CONTAINER =================
-        content = tk.Frame(self, bg="#b2e5ed")
-        content.pack(fill="both", expand=True, padx=20, pady=20)
-
-        content.columnconfigure(0, weight=3)
-        content.columnconfigure(1, weight=1)
-        content.rowconfigure(1, weight=1)
 
         # ================= SEARCH BAR =================
-        search_frame = tk.Frame(content, bg="#b2e5ed")
-        search_frame.grid(row=0, column=0, sticky="w", pady=(0, 10))
-
         self.search_var = tk.StringVar()
 
         self.search_entry = tk.Entry(
-            search_frame,
+            self,
             textvariable=self.search_var,
             width=30,
-            font=("Arial", 14),
+            font=("Arial", 15),
             fg="gray"
         )
-        self.search_entry.pack(side="left", ipady=5)
+        self.search_entry.place(x=20, y=20)
         self.search_entry.insert(0, "Search account")
 
         self.search_entry.bind("<FocusIn>", self.clear_placeholder)
         self.search_entry.bind("<FocusOut>", self.add_placeholder)
 
         tk.Button(
-            search_frame,
+            self,
             text="🔍",
             font=("Arial", 14),
             command=self.search_account
-        ).pack(side="left", padx=5)
+        ).place(x=260, y=20)
 
         # ================= TABLE =================
-        table_frame = tk.Frame(content, bg="white", bd=2, relief="groove")
-        table_frame.grid(row=1, column=0, sticky="nsew")
+        table_frame = tk.Frame(self, bg="white")
+        table_frame.place(x=20, y=80, width=900, height=550)
 
         columns = ("id", "username", "created")
         self.account_table = ttk.Treeview(
@@ -76,23 +52,17 @@ class Account(tk.Frame):
         self.account_table.heading("username", text="Username")
         self.account_table.heading("created", text="Created At")
 
-        self.account_table.column("id", width=80, anchor="center")
+        self.account_table.column("id", width=80)
         self.account_table.column("username", width=300)
         self.account_table.column("created", width=200)
 
-        scrollbar = ttk.Scrollbar(
-            table_frame, orient="vertical", command=self.account_table.yview
-        )
-        self.account_table.configure(yscrollcommand=scrollbar.set)
-
-        self.account_table.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
+        self.account_table.pack(fill="both", expand=True, padx=10, pady=10)
 
         self.load_accounts()
 
-        # ================= ACTION BUTTONS =================
-        btn_frame = tk.Frame(content, bg="#b2e5ed")
-        btn_frame.grid(row=1, column=1, sticky="n", padx=20)
+        # ================= BUTTONS =================
+        btn_frame = tk.Frame(self, bg="#b2e5ed")
+        btn_frame.place(x=950, y=150)
 
         tk.Button(
             btn_frame,
@@ -103,7 +73,7 @@ class Account(tk.Frame):
             fg="white",
             font=("Arial", 11, "bold"),
             command=self.change_password
-        ).pack(pady=10, fill="x")
+        ).pack(pady=10)
 
         tk.Button(
             btn_frame,
@@ -114,7 +84,7 @@ class Account(tk.Frame):
             fg="white",
             font=("Arial", 11, "bold"),
             command=self.delete_account
-        ).pack(pady=10, fill="x")
+        ).pack(pady=10)
 
     # ================= FUNCTIONS =================
     def clear_placeholder(self, event):
@@ -129,28 +99,36 @@ class Account(tk.Frame):
 
     def load_accounts(self):
         self.account_table.delete(*self.account_table.get_children())
+
         try:
-            conn = db_connect()
+            conn = get_connection()
             cursor = conn.cursor()
+
             cursor.execute("SELECT id, username, created_at FROM users")
-            for row in cursor.fetchall():
+            rows = cursor.fetchall()
+
+            for row in rows:
                 self.account_table.insert("", "end", values=row)
+
             conn.close()
+
         except Exception as e:
             messagebox.showerror("Database Error", str(e))
 
     def search_account(self):
         keyword = self.search_var.get()
-        self.account_table.delete(*self.account_table.get_children())
 
         try:
-            conn = db_connect()
+            conn = db()
             cursor = conn.cursor()
+
             cursor.execute(
                 "SELECT id, username, created_at FROM users WHERE username LIKE %s",
                 (f"%{keyword}%",)
             )
             rows = cursor.fetchall()
+
+            self.account_table.delete(*self.account_table.get_children())
 
             for row in rows:
                 self.account_table.insert("", "end", values=row)
@@ -164,9 +142,11 @@ class Account(tk.Frame):
             messagebox.showerror("Database Error", str(e))
 
     def change_password(self):
-        if not self.account_table.focus():
+        selected = self.account_table.focus()
+        if not selected:
             messagebox.showwarning("Select", "Select an account first")
             return
+
         ChangePasswordWindow(self)
 
     def delete_account(self):
@@ -179,8 +159,9 @@ class Account(tk.Frame):
 
         if messagebox.askyesno("Delete", "Delete this account?"):
             try:
-                conn = db_connect()
+                conn = get_connection()
                 cursor = conn.cursor()
+
                 cursor.execute("DELETE FROM users WHERE id=%s", (user_id,))
                 conn.commit()
                 conn.close()
@@ -206,11 +187,11 @@ class ChangePasswordWindow(tk.Toplevel):
             parent.account_table.focus(), "values"
         )[0]
 
-        tk.Label(self, text="New Password", font=("Arial", 12)).pack(pady=(20, 5))
+        tk.Label(self, text="New Password", font=("Arial", 12)).pack(pady=10)
         self.new_pass = tk.Entry(self, show="*", width=30)
         self.new_pass.pack()
 
-        tk.Label(self, text="Confirm Password", font=("Arial", 12)).pack(pady=(15, 5))
+        tk.Label(self, text="Confirm Password", font=("Arial", 12)).pack(pady=10)
         self.confirm_pass = tk.Entry(self, show="*", width=30)
         self.confirm_pass.pack()
 
@@ -221,7 +202,7 @@ class ChangePasswordWindow(tk.Toplevel):
             fg="white",
             width=15,
             command=self.save_password
-        ).pack(pady=25)
+        ).pack(pady=20)
 
     def save_password(self):
         if self.new_pass.get() != self.confirm_pass.get():
@@ -229,12 +210,14 @@ class ChangePasswordWindow(tk.Toplevel):
             return
 
         try:
-            conn = db_connect()
+            conn = get_connection()
             cursor = conn.cursor()
+
             cursor.execute(
                 "UPDATE users SET password=%s WHERE id=%s",
                 (self.new_pass.get(), self.user_id)
             )
+
             conn.commit()
             conn.close()
 

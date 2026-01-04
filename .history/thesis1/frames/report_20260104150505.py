@@ -10,7 +10,6 @@ from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 import matplotlib.pyplot as plt
 
-# ================= DATABASE =================
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
 from utils.database import db_connect
@@ -23,53 +22,55 @@ class Report(tk.Frame):
         self.pack(fill="both", expand=True)
 
         # ================= HEADER =================
-        header = tk.Frame(self, bg="#0047AB", height=65)
+        header = tk.Frame(self, bg="#0047AB", height=90)
         header.pack(fill="x")
 
         tk.Label(
             header,
             text="DATE-BASED REPORTS",
-            font=("Arial", 20, "bold"),
+            font=("Arial", 24, "bold"),
             bg="#0047AB",
             fg="white"
-        ).pack(side="left", padx=20, pady=15)
+        ).pack(side="left", padx=30, pady=25)
 
-        # ================= MAIN =================
+        # ================= MAIN CONTENT =================
         content = tk.Frame(self, bg="#b2e5ed")
-        content.pack(fill="both", expand=True, padx=10, pady=5)
+        content.pack(fill="both", expand=True, padx=20, pady=20)
         content.columnconfigure((0, 1), weight=1)
 
-        # ================= FILTER =================
+        # ================= FILTER CARD =================
         filter_card = tk.Frame(content, bg="white", bd=2, relief="groove")
-        filter_card.grid(row=0, column=0, columnspan=2, sticky="ew", pady=5)
+        filter_card.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 15))
+        filter_card.columnconfigure((1, 3), weight=1)
 
-        tk.Label(filter_card, text="From:", bg="white").grid(row=0, column=0, padx=5, pady=5)
-        self.from_date = tk.Entry(filter_card, width=12)
-        self.from_date.grid(row=0, column=1)
+        tk.Label(filter_card, text="From:", bg="white").grid(row=0, column=0, padx=10, pady=10)
+        self.from_date = tk.Entry(filter_card)
+        self.from_date.grid(row=0, column=1, sticky="ew")
         self.from_date.insert(0, "2024-01-01")
 
-        tk.Label(filter_card, text="To:", bg="white").grid(row=0, column=2, padx=5)
-        self.to_date = tk.Entry(filter_card, width=12)
-        self.to_date.grid(row=0, column=3)
+        tk.Label(filter_card, text="To:", bg="white").grid(row=0, column=2, padx=10)
+        self.to_date = tk.Entry(filter_card)
+        self.to_date.grid(row=0, column=3, sticky="ew")
         self.to_date.insert(0, datetime.today().strftime("%Y-%m-%d"))
 
         tk.Button(
             filter_card,
-            text="Apply",
+            text="Apply Filter",
             bg="#2196F3",
             fg="white",
-            width=10,
+            width=15,
             command=self.apply_filter
-        ).grid(row=0, column=4, padx=8)
+        ).grid(row=0, column=4, padx=15)
 
-        # ================= TABLES =================
+        # ================= TABLE SECTION =================
         tables = tk.Frame(content, bg="#b2e5ed")
         tables.grid(row=1, column=0, columnspan=2, sticky="nsew")
         tables.columnconfigure((0, 1), weight=1)
+        tables.rowconfigure((0, 1), weight=1)
 
         self.student_table = self.create_table(
             tables, "STUDENTS",
-            ["ID", "Name", "Grade", "Date"], 0, 0
+            ["ID", "Name", "Grade Level", "Date"], 0, 0
         )
 
         self.teacher_table = self.create_table(
@@ -79,71 +80,63 @@ class Report(tk.Frame):
 
         self.fetcher_table = self.create_table(
             tables, "FETCHERS",
-            ["ID", "Fetcher", "Contact", "Date"], 1, 0, colspan=2
+            ["ID", "Fetcher Name", "Contact", "Date"], 1, 0, colspan=2
         )
 
-        # ================= BUTTONS =================
+        # ================= ACTION BUTTONS =================
         btn_frame = tk.Frame(self, bg="#b2e5ed")
-        btn_frame.pack(pady=5)
+        btn_frame.pack(pady=15)
 
         tk.Button(
             btn_frame,
             text="EXPORT",
-            font=("Arial", 11, "bold"),
+            font=("Arial", 12, "bold"),
             bg="#4CAF50",
             fg="white",
-            width=14,
+            width=15,
             command=self.export_popup
-        ).grid(row=0, column=0, padx=8)
+        ).grid(row=0, column=0, padx=10)
 
         tk.Button(
             btn_frame,
             text="SHOW CHART",
-            font=("Arial", 11, "bold"),
+            font=("Arial", 12, "bold"),
             bg="#FF9800",
             fg="white",
-            width=14,
+            width=15,
             command=self.show_chart
-        ).grid(row=0, column=1, padx=8)
+        ).grid(row=0, column=1, padx=10)
 
         self.apply_filter()
 
     # ================= TABLE CREATOR =================
     def create_table(self, parent, title, columns, r, c, colspan=1):
         frame = tk.Frame(parent, bg="white", bd=2, relief="groove")
-        frame.grid(row=r, column=c, columnspan=colspan, padx=6, pady=6, sticky="nsew")
+        frame.grid(row=r, column=c, columnspan=colspan, sticky="nsew", padx=10, pady=10)
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(1, weight=1)
 
-        tk.Label(
-            frame,
-            text=title,
-            font=("Arial", 14, "bold"),
-            bg="white"
-        ).pack(pady=2)
+        tk.Label(frame, text=title, font=("Arial", 16, "bold"), bg="white").grid(row=0, column=0, pady=5)
 
-        tree = ttk.Treeview(
-            frame,
-            columns=columns,
-            show="headings",
-            height=5   # 🔥 KEY FIX
-        )
-        tree.pack(side="left", fill="both", expand=True, padx=5)
+        tree = ttk.Treeview(frame, columns=columns, show="headings")
+        tree.grid(row=1, column=0, sticky="nsew", padx=10)
 
         scrollbar = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
-        scrollbar.pack(side="right", fill="y")
+        scrollbar.grid(row=1, column=1, sticky="ns")
         tree.configure(yscrollcommand=scrollbar.set)
 
         for col in columns:
             tree.heading(col, text=col)
-            tree.column(col, width=130, anchor="center")
+            tree.column(col, width=150, anchor="center")
 
         tree.count_var = tk.StringVar(value="Total: 0")
         tk.Label(
             frame,
             textvariable=tree.count_var,
+            font=("Arial", 11, "bold"),
             bg="white",
-            fg="#0047AB",
-            font=("Arial", 10, "bold")
-        ).pack(pady=2)
+            fg="#0047AB"
+        ).grid(row=2, column=0, pady=5)
 
         return tree
 
@@ -188,32 +181,30 @@ class Report(tk.Frame):
                 count += 1
         table.count_var.set(f"Total: {count}")
 
-    # ================= EXPORT =================
+    # ================= EXPORT & CHART =================
     def export_popup(self):
         win = tk.Toplevel(self)
         win.title("Export")
-        win.geometry("280x240")
+        win.geometry("300x260")
         win.resizable(False, False)
 
         choice = tk.StringVar(value="students")
         fmt = tk.StringVar(value="csv")
 
-        tk.Label(win, text="Choose Data", font=("Arial", 11, "bold")).pack(pady=5)
+        tk.Label(win, text="Choose Data", font=("Arial", 12, "bold")).pack(pady=5)
         for v in ("students", "teachers", "fetchers"):
             tk.Radiobutton(win, text=v.title(), variable=choice, value=v).pack(anchor="w", padx=40)
 
-        tk.Label(win, text="Format", font=("Arial", 11, "bold")).pack(pady=5)
+        tk.Label(win, text="Format", font=("Arial", 12, "bold")).pack(pady=5)
         for v in ("csv", "excel", "pdf"):
             tk.Radiobutton(win, text=v.upper(), variable=fmt, value=v).pack(anchor="w", padx=40)
 
         tk.Button(
-            win,
-            text="Export",
-            bg="#4CAF50",
-            fg="white",
-            width=14,
+            win, text="Export",
+            bg="#4CAF50", fg="white",
+            width=15,
             command=lambda: self.export(choice.get(), fmt.get(), win)
-        ).pack(pady=10)
+        ).pack(pady=15)
 
     def export(self, choice, fmt, win):
         table = {
@@ -245,19 +236,18 @@ class Report(tk.Frame):
             pdf = canvas.Canvas(path, pagesize=letter)
             y = 750
             pdf.drawString(40, y, " | ".join(headers))
-            y -= 25
+            y -= 30
             for r in rows:
                 if y < 50:
                     pdf.showPage()
                     y = 750
                 pdf.drawString(40, y, " | ".join(map(str, r)))
-                y -= 18
+                y -= 20
             pdf.save()
 
         win.destroy()
         messagebox.showinfo("Success", "Export completed")
 
-    # ================= CHART =================
     def show_chart(self):
         labels = ["Students", "Teachers", "Fetchers"]
         values = [

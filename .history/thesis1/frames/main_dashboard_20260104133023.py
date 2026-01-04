@@ -50,22 +50,22 @@ class MainDashboard(tk.Frame):
             bg="#ff6b6b",
             fg="white",
             font=("Arial", 12, "bold"),
-            command=self.logout 
+            command=self.logout  # call the correct method below
         ).pack(side="right", padx=20, pady=10)
 
-        
+        # ================= DEFAULT PAGE =================
         self.open_frame(StudentRecord)
 
-    
+    # ================= PAGE LOADER =================
     def open_frame(self, frame_class):
         if self.current_frame is not None:
             self.current_frame.destroy()
 
-       
+        # Pass both parent and controller
         self.current_frame = frame_class(self.main_area, self.controller)
         self.current_frame.pack(fill="both", expand=True)
 
-    
+    # ================= SIDEBAR BUTTON =================
     def create_menu_button(self, text, frame_class):
         tk.Button(
             self.sidebar,

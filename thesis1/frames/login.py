@@ -18,6 +18,8 @@ def add_hover_effect(button, hover_bg, default_bg):
     button.bind("<Enter>", lambda e: button.config(bg=hover_bg))
     button.bind("<Leave>", lambda e: button.config(bg=default_bg))
 
+    
+
 
 # ================= LOGIN FRAME =================
 class LoginFrame(tk.Frame):
@@ -26,6 +28,7 @@ class LoginFrame(tk.Frame):
         self.controller = controller
         self.left_image()
         self.login_panel()
+        
 
     def left_image(self):
         left = tk.Frame(self, width=675, height=700, bg="#E0E0E0")
@@ -106,6 +109,7 @@ class SignUpFrame(tk.Frame):
         self.controller = controller
         self.left_image()
         self.signup_panel()
+    
 
     def left_image(self):
         left = tk.Frame(self, width=675, height=700, bg="#E0E0E0")
@@ -135,7 +139,7 @@ class SignUpFrame(tk.Frame):
 
         btn = tk.Button(
             panel, text="Sign Up", bg="#00A86B", fg="white",
-            font=("Arial", 14, "bold"), command=self.signup
+            font=("Arial", 14, "bold"), command=lambda: self.controller.show_frame("SignUpFrame")
         )
         btn.place(x=20, y=330, width=250, height=45)
         add_hover_effect(btn, "#007A4D", "#00A86B")

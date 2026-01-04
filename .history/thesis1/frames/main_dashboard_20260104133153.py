@@ -61,11 +61,11 @@ class MainDashboard(tk.Frame):
         if self.current_frame is not None:
             self.current_frame.destroy()
 
-       
+        # Pass both parent and controller
         self.current_frame = frame_class(self.main_area, self.controller)
         self.current_frame.pack(fill="both", expand=True)
 
-    
+    # ================= SIDEBAR BUTTON =================
     def create_menu_button(self, text, frame_class):
         tk.Button(
             self.sidebar,
