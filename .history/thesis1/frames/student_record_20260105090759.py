@@ -3,7 +3,6 @@ from tkinter import messagebox, filedialog, ttk
 from PIL import ImageTk, Image
 import os
 import sys
-import time
 
 # ================= PATH SETUP =================
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -20,7 +19,6 @@ class StudentRecord(tk.Frame):
         super().__init__(parent, bg="#b2e5ed")
         self.controller = controller
         self.photo_path = None
-        self.selected_student_id = None
 
         # ================= HEADER =================
         header = tk.Frame(self, height=70, bg="#0047AB")
@@ -35,12 +33,13 @@ class StudentRecord(tk.Frame):
         ).place(x=30, y=18)
 
         # ================= LEFT PANEL =================
-        self.left_box = tk.Frame(self, width=430, height=460, bg="white", bd=2, relief="groove")
-        self.left_box.place(x=40, y=90)
-        self.left_box.pack_propagate(False)
+        self.student_left = tk.Frame(self, width=430, height=460, bg="white", bd=2, relief="groove")
+        self.student_left.place(x=40, y=90)
+        self.student_left.pack_propagate(False)
 
         # ================= PHOTO =================
-        self.photo_frame = tk.Frame(self.left_box, width=160, height=160, bg="#E0E0E0", bd=2, relief="ridge")
+        self.photo_frame = tk.Frame(self.student_left, width=160, height=160,
+                                    bg="#E0E0E0", bd=2, relief="ridge")
         self.photo_frame.place(x=20, y=20)
         self.photo_frame.pack_propagate(False)
 
@@ -48,7 +47,7 @@ class StudentRecord(tk.Frame):
         self.photo_label.pack(fill="both", expand=True)
 
         tk.Button(
-            self.left_box,
+            self.student_left,
             text="Upload Photo",
             width=14,
             command=self.upload_photo
@@ -75,21 +74,21 @@ class StudentRecord(tk.Frame):
         y = 200
         for i, (label, var) in enumerate(fields):
             tk.Label(
-                self.left_box,
+                self.student_left,
                 text=label,
                 bg="white",
                 font=("Arial", 11)
             ).place(x=20, y=y + i * 35)
 
             tk.Entry(
-                self.left_box,
+                self.student_left,
                 textvariable=var,
                 width=30,
                 font=("Arial", 11)
             ).place(x=150, y=y + i * 35)
 
-        # ================= BUTTONS =================
-        btn_frame = tk.Frame(self.left_box, bg="white")
+        # ================= BUTTONS (ALIGNED) =================
+        btn_frame = tk.Frame(self.student_left, bg="white")
         btn_frame.place(x=40, y=410)
 
         tk.Button(
@@ -129,29 +128,10 @@ class StudentRecord(tk.Frame):
 
         tk.Label(
             self.right_panel,
-            text="Search Student",
+            text="Student List",
             font=("Arial", 14, "bold"),
             bg="white"
         ).place(x=20, y=15)
-
-        self.search_var = tk.StringVar()
-        tk.Entry(self.right_panel, textvariable=self.search_var, width=25, font=("Arial", 11))\
-            .place(x=20, y=50)
-
-        tk.Button(
-            self.right_panel,
-            text="Search",
-            command=self.search_student
-        ).place(x=260, y=47)
-
-        self.count_var = tk.StringVar(value="Total Students: 0")
-        tk.Label(
-            self.right_panel,
-            textvariable=self.count_var,
-            font=("Arial", 11, "bold"),
-            fg="#0047AB",
-            bg="white"
-        ).place(x=20, y=85)
 
         # ================= TABLE =================
         self.student_table = ttk.Treeview(
@@ -166,10 +146,10 @@ class StudentRecord(tk.Frame):
         self.student_table.heading("grade_lvl", text="Grade")
 
         self.student_table.column("Student_id", width=120)
-        self.student_table.column("Student_name", width=220)
+        self.student_table.column("Student_name", width=240)
         self.student_table.column("grade_lvl", width=80)
 
-        self.student_table.place(x=20, y=120, width=450)
+        self.student_table.place(x=20, y=60, width=450)
         self.student_table.bind("<<TreeviewSelect>>", self.on_table_select)
 
         self.load_data()
@@ -202,30 +182,11 @@ class StudentRecord(tk.Frame):
             conn = db_connect()
             cursor = conn.cursor()
             cursor.execute("SELECT Student_id, Student_name, grade_lvl FROM student")
-            rows = cursor.fetchall()
-            for row in rows:
+            for row in cursor.fetchall():
                 self.student_table.insert("", "end", values=row)
-            self.count_var.set(f"Total Students: {len(rows)}")
         finally:
             if cursor: cursor.close()
             if conn: conn.close()
-
-    def search_student(self):
-        keyword = self.search_var.get()
-        self.student_table.delete(*self.student_table.get_children())
-
-        conn = db_connect()
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT Student_id, Student_name, grade_lvl FROM student WHERE Student_name LIKE %s",
-            (f"%{keyword}%",)
-        )
-        rows = cursor.fetchall()
-        for row in rows:
-            self.student_table.insert("", "end", values=row)
-        self.count_var.set(f"Total Students: {len(rows)}")
-        cursor.close()
-        conn.close()
 
     def add_student(self):
         if not self.photo_path:
@@ -240,15 +201,17 @@ class StudentRecord(tk.Frame):
                 messagebox.showerror("Error", "Student ID already exists")
                 return
 
-            img_save = os.path.join(PHOTO_DIR, f"student_{student_id}_{int(time.time())}.jpg")
+            img_save = os.path.join(PHOTO_DIR, f"student_{student_id}.jpg")
             Image.open(self.photo_path).save(img_save)
 
             conn = db_connect()
             cursor = conn.cursor()
-            cursor.execute("""INSERT INTO student
+            cursor.execute("""
+                INSERT INTO student
                 (Student_name, Student_id, grade_lvl, Guardian_name,
                  Guardian_contact, Teacher_name, photo_path)
-                VALUES (%s,%s,%s,%s,%s,%s,%s)""", (
+                VALUES (%s,%s,%s,%s,%s,%s,%s)
+            """, (
                 self.student_name_var.get(),
                 student_id,
                 grade,
@@ -276,13 +239,15 @@ class StudentRecord(tk.Frame):
 
             conn = db_connect()
             cursor = conn.cursor()
-            cursor.execute("""UPDATE student SET
+            cursor.execute("""
+                UPDATE student SET
                     Student_name=%s,
                     grade_lvl=%s,
                     Guardian_name=%s,
                     Guardian_contact=%s,
                     Teacher_name=%s
-                WHERE Student_id=%s""", (
+                WHERE Student_id=%s
+            """, (
                 self.student_name_var.get(),
                 grade,
                 self.guardian_name_var.get(),

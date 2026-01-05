@@ -54,7 +54,7 @@ class MainDashboard(tk.Frame):
 
         tk.Label(
             self.topbar,
-            text="CAINTA CATHOLIC COLLEGE - SYSTEM ADMINISTRATION",
+            text="CAINTA CATHOLIC COLLEGE - SYSTEM ",
             bg="#26c6da",
             fg="white",
             font=("Arial", 14, "bold")
