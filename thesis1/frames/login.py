@@ -12,13 +12,10 @@ from utils.database import db_connect
 
 SESSION_FILE = "session.txt"
 
-
 # ================= BUTTON HOVER =================
 def add_hover_effect(button, hover_bg, default_bg):
     button.bind("<Enter>", lambda e: button.config(bg=hover_bg))
     button.bind("<Leave>", lambda e: button.config(bg=default_bg))
-
-    
 
 
 # ================= LOGIN FRAME =================
@@ -28,20 +25,22 @@ class LoginFrame(tk.Frame):
         self.controller = controller
         self.left_image()
         self.login_panel()
-        
 
     def left_image(self):
         left = tk.Frame(self, width=675, height=700, bg="#E0E0E0")
-        left.pack(side=tk.LEFT)
+        left.pack(side=tk.LEFT, fill=tk.BOTH)
         left.pack_propagate(False)
 
         img_path = os.path.join(os.path.dirname(__file__), "assets", "icon", "ccclogo.jpg")
-        try:
-            img = Image.open(img_path).resize((675, 700))
-            self.photo = ImageTk.PhotoImage(img)
-            tk.Label(left, image=self.photo).pack(fill=tk.BOTH, expand=True)
-        except:
-            tk.Label(left, text="Image not found").pack()
+        if os.path.exists(img_path):
+            try:
+                img = Image.open(img_path).resize((675, 700))
+                self.photo = ImageTk.PhotoImage(img)
+                tk.Label(left, image=self.photo).pack(fill=tk.BOTH, expand=True)
+            except:
+                tk.Label(left, text="Image could not be opened").pack(expand=True)
+        else:
+            tk.Label(left, text="Image not found", font=("Arial", 20)).pack(expand=True)
 
     def login_panel(self):
         panel = tk.Frame(self, width=400, height=450, bg="white", bd=2, relief="groove")
@@ -54,22 +53,21 @@ class LoginFrame(tk.Frame):
         tk.Label(panel, text="Username", bg="white").place(x=20, y=90)
         self.username = tk.Entry(panel, font=("Arial", 14), bg="#F0F0F0", bd=0)
         self.username.place(x=20, y=120, width=250, height=35)
+        self.username.focus_set()
+        self.username.bind("<Button-1>", lambda e: self.username.focus_set())
 
         tk.Label(panel, text="Password", bg="white").place(x=20, y=170)
         self.password = tk.Entry(panel, font=("Arial", 14), bg="#F0F0F0", bd=0, show="*")
         self.password.place(x=20, y=200, width=250, height=35)
+        self.password.bind("<Button-1>", lambda e: self.password.focus_set())
 
-        btn = tk.Button(
-            panel, text="Login", bg="#0047AB", fg="white",
-            font=("Arial", 14, "bold"), command=self.login
-        )
+        btn = tk.Button(panel, text="Login", bg="#0047AB", fg="white",
+                        font=("Arial", 14, "bold"), command=self.login)
         btn.place(x=20, y=260, width=250, height=45)
         add_hover_effect(btn, "#003380", "#0047AB")
 
-        su = tk.Button(
-            panel, text="Sign Up", bg="#00A86B", fg="white",
-            command=lambda: self.controller.show_frame("SignUpFrame")
-        )
+        su = tk.Button(panel, text="Sign Up", bg="#00A86B", fg="white",
+                       command=lambda: self.controller.show_frame("SignUpFrame"))
         su.place(x=20, y=320, width=120, height=35)
         add_hover_effect(su, "#007A4D", "#00A86B")
 
@@ -83,14 +81,18 @@ class LoginFrame(tk.Frame):
 
         hashed = hashlib.sha256(pw.encode()).hexdigest()
 
-        conn = db_connect()
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT * FROM users WHERE username=%s AND password=%s",
-            (user, hashed)
-        )
-        result = cur.fetchone()
-        conn.close()
+        try:
+            conn = db_connect()
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT * FROM users WHERE username=%s AND password=%s",
+                (user, hashed)
+            )
+            result = cur.fetchone()
+            conn.close()
+        except Exception as e:
+            messagebox.showerror("Error", f"Database error: {str(e)}")
+            return
 
         if result:
             with open(SESSION_FILE, "w") as f:
@@ -109,21 +111,22 @@ class SignUpFrame(tk.Frame):
         self.controller = controller
         self.left_image()
         self.signup_panel()
-    
 
     def left_image(self):
         left = tk.Frame(self, width=675, height=700, bg="#E0E0E0")
-        left.pack(side=tk.LEFT)
+        left.pack(side=tk.LEFT, fill=tk.BOTH)
         left.pack_propagate(False)
 
         img_path = os.path.join(os.path.dirname(__file__), "assets", "icon", "ccclogo.jpg")
-        if not os.path.exists(img_path):
-            tk.Label(left, text="Image not found").pack()
-            return
-
-        img = Image.open(img_path).resize((675, 700))
-        self.photo = ImageTk.PhotoImage(img)
-        tk.Label(left, image=self.photo).pack(fill=tk.BOTH, expand=True)
+        if os.path.exists(img_path):
+            try:
+                img = Image.open(img_path).resize((675, 700))
+                self.photo = ImageTk.PhotoImage(img)
+                tk.Label(left, image=self.photo).pack(fill=tk.BOTH, expand=True)
+            except:
+                tk.Label(left, text="Image could not be opened").pack(expand=True)
+        else:
+            tk.Label(left, text="Image not found", font=("Arial", 20)).pack(expand=True)
 
     def signup_panel(self):
         panel = tk.Frame(self, width=400, height=500, bg="white", bd=2, relief="groove")
@@ -137,24 +140,21 @@ class SignUpFrame(tk.Frame):
         self.password = self.entry(panel, "Password", 170, True)
         self.confirm = self.entry(panel, "Confirm Password", 250, True)
 
-        btn = tk.Button(
-            panel, text="Sign Up", bg="#00A86B", fg="white",
-            font=("Arial", 14, "bold"), command=lambda: self.controller.show_frame("SignUpFrame")
-        )
+        btn = tk.Button(panel, text="Sign Up", bg="#00A86B", fg="white",
+                        font=("Arial", 14, "bold"), command=self.signup)
         btn.place(x=20, y=330, width=250, height=45)
         add_hover_effect(btn, "#007A4D", "#00A86B")
 
-        back = tk.Button(
-            panel, text="Back to Login",
-            command=lambda: self.controller.show_frame("LoginFrame")
-        )
+        back = tk.Button(panel, text="Back to Login", bg="#FF6347", fg="white",
+                         command=lambda: self.controller.show_frame("LoginFrame"))
         back.place(x=20, y=390, width=250, height=35)
+        add_hover_effect(back, "#CC3E2E", "#FF6347")
 
     def entry(self, panel, text, y, hide=False):
         tk.Label(panel, text=text, bg="white").place(x=20, y=y)
-        e = tk.Entry(panel, font=("Arial", 14), bg="#F0F0F0", bd=0,
-                     show="*" if hide else "")
+        e = tk.Entry(panel, font=("Arial", 14), bg="#F0F0F0", bd=0, show="*" if hide else "")
         e.place(x=20, y=y + 30, width=250, height=35)
+        e.bind("<Button-1>", lambda event: e.focus_set())
         return e
 
     def signup(self):
@@ -185,3 +185,4 @@ class SignUpFrame(tk.Frame):
             self.controller.show_frame("LoginFrame")
         except:
             messagebox.showerror("Error", "Username already exists")
+            return
