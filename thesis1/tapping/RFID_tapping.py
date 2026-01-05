@@ -16,8 +16,13 @@ from PyQt5.QtWidgets import (
 )
 
 # ---------------- CONSTANTS ----------------
-DEFAULT_PHOTO = r"C:\Users\johnk\Downloads\default_photo.jfif"
-HISTORY_DIR = r"C:\Users\johnk\OneDrive\Desktop\Tapping\RFIDsystem\thesis1\tapping\history log"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# one folder back → assets → default photo
+DEFAULT_PHOTO = os.path.join(BASE_DIR, "..", "assets", "default_photo.jfif")
+
+# one folder back → history log
+HISTORY_DIR = os.path.join(BASE_DIR, "..", "history log")
 
 # ---------------- SERIAL THREAD ----------------
 class SerialThread(QThread):
@@ -129,7 +134,9 @@ class RFIDTapping(QMainWindow):
     def init_history_file(self):
         if not os.path.exists(self.history_file):
             with open(self.history_file, "w", newline="", encoding="utf-8") as f:
-                csv.writer(f).writerow(["Date", "Time", "Fetcher", "Student", "Status"])
+                csv.writer(f).writerow(
+                    ["Date", "Time", "Fetcher", "Student", "Status"]
+                )
 
     def save_history(self, fetcher, student, status):
         now = datetime.now()
@@ -185,11 +192,9 @@ class RFIDTapping(QMainWindow):
         if self.fetcher_data and self.student_data:
             return
 
-        # Try fetcher
         self.cursor.execute("SELECT * FROM fetcher WHERE rfid=%s", (uid,))
         fetcher = self.cursor.fetchone()
 
-        # Try student
         self.cursor.execute("SELECT * FROM student WHERE Student_id=%s", (uid,))
         student = self.cursor.fetchone()
 
