@@ -17,11 +17,7 @@ from PyQt5.QtWidgets import (
 
 # ---------------- CONSTANTS ----------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# one folder back → assets → default photo
 DEFAULT_PHOTO = os.path.join(BASE_DIR, "..", "assets", "default_photo.jfif")
-
-# one folder back → history log
 HISTORY_DIR = os.path.join(BASE_DIR, "..", "history log")
 
 # ---------------- SERIAL THREAD ----------------
@@ -53,7 +49,7 @@ class RFIDTapping(QMainWindow):
         super().__init__()
 
         self.setWindowTitle("RFID Fetcher - Student System")
-        self.setGeometry(100, 100, 1300, 780)
+        self.setGeometry(100, 100, 1300, 800)
 
         self.fetcher_data = None
         self.student_data = None
@@ -71,12 +67,14 @@ class RFIDTapping(QMainWindow):
         self.setCentralWidget(central)
         main_layout = QHBoxLayout(central)
 
+        # -------- LEFT --------
         left_layout = QHBoxLayout()
         self.fetcher_panel = self.create_person_panel("FETCHER", "#1e3a8a")
         self.student_panel = self.create_person_panel("STUDENT", "#047857")
         left_layout.addWidget(self.fetcher_panel)
         left_layout.addWidget(self.student_panel)
 
+        # -------- RIGHT --------
         right_layout = QVBoxLayout()
 
         title = QLabel("RFID Fetcher - Student System")
@@ -84,6 +82,20 @@ class RFIDTapping(QMainWindow):
         title.setFont(QFont("Segoe UI", 18, QFont.Bold))
         title.setStyleSheet("background:#047857;color:white;padding:12px;")
         right_layout.addWidget(title)
+
+        # 📅 DATE DISPLAY
+        self.date_label = QLabel()
+        self.date_label.setAlignment(Qt.AlignCenter)
+        self.date_label.setFont(QFont("Segoe UI", 13, QFont.Bold))
+        self.date_label.setStyleSheet("color:#374151;padding:4px;")
+        right_layout.addWidget(self.date_label)
+
+        # ⏰ TIME DISPLAY (12-HOUR FORMAT)
+        self.time_label = QLabel()
+        self.time_label.setAlignment(Qt.AlignCenter)
+        self.time_label.setFont(QFont("Segoe UI", 20, QFont.Bold))
+        self.time_label.setStyleSheet("color:#111827;padding-bottom:10px;")
+        right_layout.addWidget(self.time_label)
 
         self.status_label = QLabel("WAITING FOR RFID...")
         self.status_label.setAlignment(Qt.AlignCenter)
@@ -105,6 +117,12 @@ class RFIDTapping(QMainWindow):
         main_layout.addLayout(left_layout, 2)
         main_layout.addLayout(right_layout, 1)
 
+        # ---------------- CLOCK TIMER ----------------
+        self.clock_timer = QTimer()
+        self.clock_timer.timeout.connect(self.update_datetime)
+        self.clock_timer.start(1000)
+        self.update_datetime()
+
         # ---------------- SERIAL ----------------
         self.serial_thread = SerialThread("COM4")
         self.serial_thread.uid_scanned.connect(self.process_rfid)
@@ -115,6 +133,12 @@ class RFIDTapping(QMainWindow):
         self.pairing_timer.timeout.connect(self.pairing_timeout)
 
         self.reset_system()
+
+    # ---------------- DATE & TIME ----------------
+    def update_datetime(self):
+        now = datetime.now()
+        self.date_label.setText(now.strftime("%B %d, %Y"))
+        self.time_label.setText(now.strftime("%I:%M:%S %p"))
 
     # ---------------- DATABASE ----------------
     def connect_db(self):
