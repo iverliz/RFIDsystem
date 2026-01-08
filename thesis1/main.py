@@ -10,6 +10,8 @@ from frames.rfid_registration import RfidRegistration
 from frames.history_log import RFIDHistory
 from frames.report import Report
 from frames.account import Account
+from frames.enrollthisyear import EnrollThisYear
+
 
 SESSION_FILE = "session.txt"
 
@@ -36,7 +38,8 @@ class Rfid(tk.Tk):
             RfidRegistration,
             RFIDHistory,
             Report,
-            Account
+            Account,
+            EnrollThisYear
         ):
             frame = FrameClass(container, self)
             self.frames[FrameClass.__name__] = frame
