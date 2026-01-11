@@ -18,6 +18,13 @@ class RfidRegistration(tk.Frame):
         self.scan_stage = "fetcher"
         self.selected_registration_id = None
 
+        # ================= PAGINATION =================
+        self.page_size = 10
+        self.current_page = 1
+        self.total_records = 0
+        self.total_pages = 1
+        self.is_searching = False
+
         # ================= SERIAL =================
         try:
             self.ser = serial.Serial("COM3", 9600, timeout=1)
@@ -31,13 +38,9 @@ class RfidRegistration(tk.Frame):
         header = tk.Frame(self, bg="#0047AB", height=65)
         header.pack(fill="x")
 
-        tk.Label(
-            header,
-            text="RFID REGISTRATION",
-            font=("Arial", 20, "bold"),
-            bg="#0047AB",
-            fg="white"
-        ).pack(side="left", padx=20, pady=15)
+        tk.Label(header, text="RFID REGISTRATION",
+                 font=("Arial", 20, "bold"),
+                 bg="#0047AB", fg="white").pack(side="left", padx=20, pady=15)
 
         # ================= SEARCH =================
         search_frame = tk.Frame(self, bg="#b2e5ed")
@@ -48,15 +51,16 @@ class RfidRegistration(tk.Frame):
             search_frame,
             textvariable=self.search_var,
             font=("Arial", 13),
-            width=30,
+            width=35,
             fg="gray"
         )
-        self.search_entry.insert(0, "e.g : student name or fetcher name")
+        self.search_entry.insert(0, "e.g. student name or fetcher name")
         self.search_entry.pack(side="right", padx=5)
+
         self.search_entry.bind("<FocusIn>", self.clear_placeholder)
         self.search_entry.bind("<FocusOut>", self.add_placeholder)
 
-        tk.Button(search_frame, text="🔍", command=self.search).pack(side="right")
+        tk.Button(search_frame, text="Search", command=self.search).pack(side="right")
 
         # ================= VARIABLES =================
         self.rfid_var = tk.StringVar()
@@ -76,44 +80,35 @@ class RfidRegistration(tk.Frame):
         forms.pack(padx=15, pady=5)
         forms.columnconfigure((0, 1), weight=1)
 
-        self.create_form(
-            forms, "FETCHER INFORMATION",
+        self.create_form(forms, "FETCHER INFORMATION",
             [("Fetcher RFID", self.rfid_var),
              ("Name", self.name_var),
              ("Address", self.address_var),
              ("Contact", self.contact_var),
-             ("Paired RFID", self.paired_rfid_var)],
-            0
-        )
+             ("Paired RFID", self.paired_rfid_var)], 0)
 
-        self.create_form(
-            forms, "STUDENT INFORMATION",
+        self.create_form(forms, "STUDENT INFORMATION",
             [("Student RFID", self.student_rfid_var),
              ("Student ID", self.student_id_var),
              ("Name", self.student_name_var),
              ("Grade", self.grade_var),
-             ("Teacher", self.teacher_var)],
-            1
-        )
+             ("Teacher", self.teacher_var)], 1)
 
         # ================= BUTTONS =================
         btn_frame = tk.Frame(self, bg="#b2e5ed")
         btn_frame.pack(pady=5)
 
-        for txt, clr, cmd in (
-            ("ADD", "#4CAF50", self.add_record),
-            ("EDIT", "#2196F3", self.edit_record),
-            ("DELETE", "#F44336", self.delete_record),
-        ):
-            tk.Button(
-                btn_frame,
-                text=txt,
-                bg=clr,
-                fg="white",
-                font=("Arial", 12, "bold"),
-                width=12,
-                command=cmd
-            ).pack(side="left", padx=5)
+        tk.Button(btn_frame, text="ADD", bg="#4CAF50", fg="white",
+                  font=("Arial", 12, "bold"), width=12,
+                  command=self.add_record).pack(side="left", padx=5)
+
+        tk.Button(btn_frame, text="EDIT", bg="#2196F3", fg="white",
+                  font=("Arial", 12, "bold"), width=12,
+                  command=self.edit_record).pack(side="left", padx=5)
+
+        tk.Button(btn_frame, text="DELETE", bg="#F44336", fg="white",
+                  font=("Arial", 12, "bold"), width=12,
+                  command=self.delete_record).pack(side="left", padx=5)
 
         # ================= TABLE =================
         table_frame = tk.Frame(self, bg="white", bd=2, relief="groove")
@@ -125,12 +120,7 @@ class RfidRegistration(tk.Frame):
             "grade", "teacher", "paired_rfid"
         )
 
-        self.table = ttk.Treeview(
-            table_frame,
-            columns=columns,
-            show="headings",
-            height=6
-        )
+        self.table = ttk.Treeview(table_frame, columns=columns, show="headings", height=8)
         self.table.pack(side="left", fill="both", expand=True)
 
         scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=self.table.yview)
@@ -141,87 +131,120 @@ class RfidRegistration(tk.Frame):
             self.table.heading(col, text=col.replace("_", " ").title())
             self.table.column(col, width=120, anchor="center")
 
-        # hide ID column
         self.table.column("registration_id", width=0, stretch=False)
-
         self.table.bind("<<TreeviewSelect>>", self.load_selected)
 
+        # ================= PAGINATION =================
+        pagination = tk.Frame(self, bg="#b2e5ed")
+        pagination.pack(pady=5)
+
+        tk.Button(pagination, text="◀ Previous", command=self.prev_page).pack(side="left", padx=5)
+        self.page_label = tk.Label(pagination, text="Page 1 of 1",
+                                   bg="#b2e5ed", font=("Arial", 11, "bold"))
+        self.page_label.pack(side="left", padx=10)
+        tk.Button(pagination, text="Next ▶", command=self.next_page).pack(side="left", padx=5)
+
         self.load_data()
+
+    # ================= SEARCH PLACEHOLDER =================
+    def clear_placeholder(self, _):
+        if self.search_entry.get().startswith("e.g"):
+            self.search_entry.delete(0, tk.END)
+            self.search_entry.config(fg="black")
+
+    def add_placeholder(self, _):
+        if not self.search_entry.get():
+            self.search_entry.insert(0, "e.g. student name or fetcher name")
+            self.search_entry.config(fg="gray")
 
     # ================= FORM CREATOR =================
     def create_form(self, parent, title, fields, col):
         frame = tk.Frame(parent, bg="white", bd=2, relief="groove", padx=10, pady=5)
         frame.grid(row=0, column=col, padx=10, pady=5, sticky="n")
-
-        tk.Label(
-            frame,
-            text=title,
-            font=("Arial", 16, "bold"),
-            bg="white",
-            fg="#0047AB"
-        ).pack(pady=5)
+        tk.Label(frame, text=title, font=("Arial", 16, "bold"),
+                 bg="white", fg="#0047AB").pack(pady=5)
 
         for label, var in fields:
             row = tk.Frame(frame, bg="white")
             row.pack(fill="x", pady=3)
-            tk.Label(row, text=label + ":", bg="white", width=14, anchor="w").pack(side="left")
-            tk.Entry(row, textvariable=var, font=("Arial", 12)).pack(
-                side="right", fill="x", expand=True
-            )
+            tk.Label(row, text=label + ":", bg="white",
+                     width=14, anchor="w").pack(side="left")
+            tk.Entry(row, textvariable=var, font=("Arial", 12))\
+                .pack(side="right", fill="x", expand=True)
 
-    # ================= SERIAL =================
-    def read_serial(self):
-        while self.ser and self.ser.is_open:
-            try:
-                uid = self.ser.readline().decode(errors="ignore").strip()
-                if uid:
-                    self.after(0, self.process_uid, uid.split(":")[-1])
-                time.sleep(0.1)
-            except Exception:
-                pass
-
-    def process_uid(self, uid):
-        if self.scan_stage == "fetcher":
-            if self.check_duplicate_rfid(uid):
-                messagebox.showerror("Duplicate", "RFID already exists")
-                return
-            self.rfid_var.set(uid)
-            self.scan_stage = "student"
-            messagebox.showinfo("Next", "Scan STUDENT RFID")
-        else:
-            self.student_rfid_var.set(uid)
-            self.paired_rfid_var.set(uid)
-            self.scan_stage = "fetcher"
-            messagebox.showinfo("Ready", "You may now ADD record")
-
-    # ================= DATABASE =================
+    # ================= DATABASE + PAGINATION =================
     def load_data(self):
+        self.is_searching = False
+        self.current_page = 1
+        self._load_paginated_data()
+
+    def _load_paginated_data(self, where="", params=()):
         self.table.delete(*self.table.get_children())
+        offset = (self.current_page - 1) * self.page_size
+
         with db_connect() as conn:
             with conn.cursor() as cursor:
-                cursor.execute("""
+                cursor.execute(f"SELECT COUNT(*) FROM registrations {where}", params)
+                self.total_records = cursor.fetchone()[0]
+                self.total_pages = max(1, (self.total_records + self.page_size - 1) // self.page_size)
+
+                cursor.execute(f"""
                     SELECT registration_id, rfid, fetcher_name, student_rfid,
                            address, contact, student_id, student_name,
                            grade, teacher, paired_rfid
                     FROM registrations
-                """)
+                    {where}
+                    ORDER BY registration_id DESC
+                    LIMIT %s OFFSET %s
+                """, params + (self.page_size, offset))
+
                 for row in cursor.fetchall():
                     self.table.insert("", "end", values=row)
 
-    def check_duplicate_rfid(self, uid):
-        with db_connect() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    "SELECT 1 FROM registrations WHERE rfid=%s OR student_rfid=%s",
-                    (uid, uid)
-                )
-                return cursor.fetchone() is not None
+        self.page_label.config(text=f"Page {self.current_page} of {self.total_pages}")
 
-    # ================= CRUD =================
+    def next_page(self):
+        if self.current_page < self.total_pages:
+            self.current_page += 1
+            self.reload_page()
+
+    def prev_page(self):
+        if self.current_page > 1:
+            self.current_page -= 1
+            self.reload_page()
+
+    def reload_page(self):
+        self.search() if self.is_searching else self._load_paginated_data()
+
+    # ================= SEARCH =================
+    def search(self):
+        if self.search_var.get().startswith("e.g") or not self.search_var.get().strip():
+            messagebox.showwarning("Search", "Please enter a keyword to search.")
+            return
+
+        self.is_searching = True
+        self.current_page = 1
+        key = "%" + self.search_var.get() + "%"
+
+        where = """
+            WHERE rfid LIKE %s OR fetcher_name LIKE %s
+               OR student_name LIKE %s OR student_id LIKE %s
+               OR grade LIKE %s OR teacher LIKE %s
+               OR paired_rfid LIKE %s
+        """
+        params = (key, key, key, key, key, key, key)
+        self._load_paginated_data(where, params)
+
+    # ================= CRUD WITH VALIDATION =================
     def add_record(self):
-        if not all([self.rfid_var.get(), self.student_rfid_var.get(),
-                    self.name_var.get(), self.student_name_var.get()]):
-            messagebox.showwarning("Missing", "All fields are required")
+        if not all([
+            self.rfid_var.get(),
+            self.name_var.get(),
+            self.student_rfid_var.get(),
+            self.student_name_var.get()
+        ]):
+            messagebox.showwarning("Missing Information",
+                                   "Please fill in all required fields.")
             return
 
         with db_connect() as conn:
@@ -232,37 +255,52 @@ class RfidRegistration(tk.Frame):
                      student_id, student_name, grade, teacher, paired_rfid)
                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 """, (
-                    self.rfid_var.get(),
-                    self.name_var.get(),
-                    self.student_rfid_var.get(),
-                    self.address_var.get(),
-                    self.contact_var.get(),
-                    self.student_id_var.get(),
-                    self.student_name_var.get(),
-                    self.grade_var.get(),
-                    self.teacher_var.get(),
-                    self.paired_rfid_var.get()
+                    self.rfid_var.get(), self.name_var.get(),
+                    self.student_rfid_var.get(), self.address_var.get(),
+                    self.contact_var.get(), self.student_id_var.get(),
+                    self.student_name_var.get(), self.grade_var.get(),
+                    self.teacher_var.get(), self.paired_rfid_var.get()
                 ))
                 conn.commit()
 
-        messagebox.showinfo("Added", "Record added successfully")
+        messagebox.showinfo("Success", "Record added successfully.")
+        self.clear_form()
         self.load_data()
-        self.clear_fields()
 
     def edit_record(self):
         if not self.selected_registration_id:
-            messagebox.showwarning("Select", "Select a record to edit")
+            messagebox.showwarning("Edit", "Please select a record to edit.")
+            return
+
+        if not all([
+            self.rfid_var.get(),
+            self.name_var.get(),
+            self.student_rfid_var.get(),
+            self.student_name_var.get()
+        ]):
+            messagebox.showwarning(
+                "Missing Information",
+                "Please fill in all required fields."
+            )
             return
 
         with db_connect() as conn:
             with conn.cursor() as cursor:
                 cursor.execute("""
                     UPDATE registrations SET
-                        fetcher_name=%s, student_rfid=%s, address=%s, contact=%s,
-                        student_id=%s, student_name=%s, grade=%s,
-                        teacher=%s, paired_rfid=%s
+                        rfid=%s,
+                        fetcher_name=%s,
+                        student_rfid=%s,
+                        address=%s,
+                        contact=%s,
+                        student_id=%s,
+                        student_name=%s,
+                        grade=%s,
+                        teacher=%s,
+                        paired_rfid=%s
                     WHERE registration_id=%s
                 """, (
+                    self.rfid_var.get(),
                     self.name_var.get(),
                     self.student_rfid_var.get(),
                     self.address_var.get(),
@@ -276,16 +314,19 @@ class RfidRegistration(tk.Frame):
                 ))
                 conn.commit()
 
-        messagebox.showinfo("Updated", "Record updated successfully")
+        messagebox.showinfo("Updated", "Record updated successfully.")
+        self.clear_form()
         self.load_data()
-        self.clear_fields()
 
     def delete_record(self):
         if not self.selected_registration_id:
-            messagebox.showwarning("Select", "Select a record to delete")
+            messagebox.showwarning("Delete", "Please select a record to delete.")
             return
 
-        if not messagebox.askyesno("Confirm", "Delete record?"):
+        if not messagebox.askyesno(
+            "Confirm Delete",
+            "Are you sure you want to permanently delete this record?"
+        ):
             return
 
         with db_connect() as conn:
@@ -296,17 +337,15 @@ class RfidRegistration(tk.Frame):
                 )
                 conn.commit()
 
-        messagebox.showinfo("Deleted", "Record deleted successfully")
+        messagebox.showinfo("Deleted", "Record deleted successfully.")
+        self.clear_form()
         self.load_data()
-        self.clear_fields()
 
     # ================= UTIL =================
     def load_selected(self, _):
-        selected = self.table.focus()
-        if not selected:
+        data = self.table.item(self.table.focus(), "values")
+        if not data:
             return
-
-        data = self.table.item(selected, "values")
 
         self.selected_registration_id = data[0]
         self.rfid_var.set(data[1])
@@ -320,40 +359,34 @@ class RfidRegistration(tk.Frame):
         self.teacher_var.set(data[9])
         self.paired_rfid_var.set(data[10])
 
-    def clear_fields(self):
-        for v in (
-            self.rfid_var, self.name_var, self.address_var, self.contact_var,
-            self.student_rfid_var, self.student_id_var, self.student_name_var,
-            self.grade_var, self.teacher_var, self.paired_rfid_var
-        ):
-            v.set("")
-        self.selected_registration_id = None
-        self.scan_stage = "fetcher"
-
-    def clear_placeholder(self, _):
-        if self.search_entry.get() == "Search":
-            self.search_entry.delete(0, tk.END)
-            self.search_entry.config(fg="black")
-
-    def add_placeholder(self, _):
-        if not self.search_entry.get():
-            self.search_entry.insert(0, "Search")
-            self.search_entry.config(fg="gray")
-
-    def search(self):
-        key = "%" + self.search_var.get() + "%"
-        self.table.delete(*self.table.get_children())
+    def check_duplicate_rfid(self, uid):
         with db_connect() as conn:
             with conn.cursor() as cursor:
-                cursor.execute("""
-                    SELECT registration_id, rfid, fetcher_name, student_rfid,
-                           address, contact, student_id, student_name,
-                           grade, teacher, paired_rfid
-                    FROM registrations
-                    WHERE rfid LIKE %s OR fetcher_name LIKE %s
-                       OR student_name LIKE %s OR student_id LIKE %s
-                       OR grade LIKE %s OR teacher LIKE %s
-                       OR paired_rfid LIKE %s
-                """, (key, key, key, key, key, key, key))
-                for row in cursor.fetchall():
-                    self.table.insert("", "end", values=row)
+                cursor.execute(
+                    "SELECT 1 FROM registrations WHERE rfid=%s OR student_rfid=%s",
+                    (uid, uid)
+                )
+                return cursor.fetchone() is not None
+
+    def clear_form(self):
+        self.rfid_var.set("")
+        self.name_var.set("")
+        self.address_var.set("")
+        self.contact_var.set("")
+        self.paired_rfid_var.set("")
+        self.student_rfid_var.set("")
+        self.student_id_var.set("")
+        self.student_name_var.set("")
+        self.grade_var.set("")
+        self.teacher_var.set("")
+        self.selected_registration_id = None
+
+    # ================= SERIAL READING =================
+    def read_serial(self):
+        while self.ser and self.ser.is_open:
+            try:
+                uid = self.ser.readline().decode(errors="ignore").strip()
+                if uid:
+                    print("RFID scanned:", uid)  # You can add auto-fill here if needed
+            except Exception:
+                break

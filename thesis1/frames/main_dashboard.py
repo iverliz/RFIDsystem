@@ -136,3 +136,4 @@ class MainDashboard(tk.Frame):
                         widget.delete(0, tk.END)
 
         self.controller.show_frame("LoginFrame")
+        tk.messagebox.showinfo("Logout", "You are now logged out.")
