@@ -8,9 +8,14 @@ from frames.teacher_record import TeacherRecord
 from frames.student_record import StudentRecord
 from frames.fetcher_record import FetcherRecord
 from frames.rfid_registration import RfidRegistration
+from frames.enrollthisyear import EnrollThisYear
 
 SESSION_FILE = "session.txt"
 
+# Reusable hover effect
+def add_hover_effect(widget, hover_bg, default_bg):
+    widget.bind("<Enter>", lambda e: widget.config(bg=hover_bg))
+    widget.bind("<Leave>", lambda e: widget.config(bg=default_bg))
 
 class MainDashboard(tk.Frame):
     def __init__(self, parent, controller):
@@ -19,15 +24,14 @@ class MainDashboard(tk.Frame):
         self.configure(bg="#e0f7fa")
         self.pack(fill="both", expand=True)
 
-        # ================= CURRENT PAGE =================
         self.current_frame = None
+        self.menu_buttons = {}
 
         # ================= SIDEBAR =================
         self.sidebar = tk.Frame(self, width=250, bg="#00acc1")
         self.sidebar.pack(side=tk.LEFT, fill=tk.Y)
         self.sidebar.pack_propagate(False)
 
-        # Logo or App Title
         tk.Label(
             self.sidebar,
             text="RFID MANAGEMENT",
@@ -36,10 +40,12 @@ class MainDashboard(tk.Frame):
             font=("Arial", 16, "bold")
         ).pack(pady=20)
 
+        # ================= MENU BUTTONS =================
         self.create_menu_button("Student Record", StudentRecord)
         self.create_menu_button("Teacher Record", TeacherRecord)
         self.create_menu_button("Fetcher Record", FetcherRecord)
         self.create_menu_button("RFID Registration", RfidRegistration)
+        self.create_menu_button("Enroll This Year", EnrollThisYear)
         self.create_menu_button("History Log", RFIDHistory)
         self.create_menu_button("Account Settings", Account)
         self.create_menu_button("Reports", Report)
@@ -73,19 +79,27 @@ class MainDashboard(tk.Frame):
             command=self.logout
         )
         logout_btn.pack(side="right", padx=20, pady=8)
+        add_hover_effect(logout_btn, "#e63946", "#ff6b6b")
 
         # ================= OPEN DEFAULT FRAME =================
         self.open_frame(StudentRecord)
 
-    # ================= OPEN FRAMES =================
+    # ================= OPEN FRAME =================
     def open_frame(self, frame_class):
-        if self.current_frame is not None:
-            self.current_frame.destroy()
+        try:
+            if self.current_frame:
+                self.current_frame.destroy()
 
-        self.current_frame = frame_class(self.main_area, self.controller)
-        self.current_frame.pack(fill="both", expand=True)
+            self.current_frame = frame_class(self.main_area, self.controller)
+            self.current_frame.pack(fill="both", expand=True)
 
-    # ================= MENU BUTTON =================
+            # Highlight current menu button
+            for btn, cls in self.menu_buttons.items():
+                btn.config(bg="#00838f" if cls == frame_class else "#00acc1")
+        except Exception as e:
+            tk.messagebox.showerror("Error", f"Failed to open {frame_class.__name__}:\n{e}")
+
+    # ================= CREATE MENU BUTTON =================
     def create_menu_button(self, text, frame_class):
         btn = tk.Button(
             self.sidebar,
@@ -101,20 +115,25 @@ class MainDashboard(tk.Frame):
         )
         btn.pack(fill="x", pady=2)
 
-        # Hover effect
-        btn.bind("<Enter>", lambda e: btn.config(bg="#00838f"))
-        btn.bind("<Leave>", lambda e: btn.config(bg="#00acc1"))
+        add_hover_effect(btn, "#00838f", "#00acc1")
+        self.menu_buttons[btn] = frame_class
 
     # ================= LOGOUT FUNCTION =================
     def logout(self):
-        # Remove session file
-        if os.path.exists(SESSION_FILE):
-            os.remove(SESSION_FILE)
+        # Remove session file securely
+        try:
+            if os.path.exists(SESSION_FILE):
+                os.remove(SESSION_FILE)
+        except:
+            pass
 
-        # Clear login fields
-        login_frame = self.controller.frames["LoginFrame"]
-        login_frame.username.delete(0, tk.END)
-        login_frame.password.delete(0, tk.END)
+        # Reset all sensitive data in frames
+        for frame in self.controller.frames.values():
+            for attr in ["username", "password"]:
+                if hasattr(frame, attr):
+                    widget = getattr(frame, attr)
+                    if isinstance(widget, tk.Entry):
+                        widget.delete(0, tk.END)
 
-        # Go back to login screen
         self.controller.show_frame("LoginFrame")
+        tk.messagebox.showinfo("Logout", "You are now logged out.")

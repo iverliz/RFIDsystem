@@ -2,8 +2,9 @@ import tkinter as tk
 from tkinter import messagebox
 from PIL import ImageTk, Image
 import os
-import hashlib
 import sys
+import bcrypt
+import secrets
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
@@ -11,6 +12,7 @@ sys.path.append(BASE_DIR)
 from utils.database import db_connect
 
 SESSION_FILE = "session.txt"
+
 
 # ================= BUTTON HOVER =================
 def add_hover_effect(button, hover_bg, default_bg):
@@ -23,6 +25,7 @@ class LoginFrame(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent, bg="#F5F5F5")
         self.controller = controller
+        self.failed_attempts = 0
         self.left_image()
         self.login_panel()
 
@@ -54,12 +57,10 @@ class LoginFrame(tk.Frame):
         self.username = tk.Entry(panel, font=("Arial", 14), bg="#F0F0F0", bd=0)
         self.username.place(x=20, y=120, width=250, height=35)
         self.username.focus_set()
-        self.username.bind("<Button-1>", lambda e: self.username.focus_set())
 
         tk.Label(panel, text="Password", bg="white").place(x=20, y=170)
         self.password = tk.Entry(panel, font=("Arial", 14), bg="#F0F0F0", bd=0, show="*")
         self.password.place(x=20, y=200, width=250, height=35)
-        self.password.bind("<Button-1>", lambda e: self.password.focus_set())
 
         btn = tk.Button(panel, text="Login", bg="#0047AB", fg="white",
                         font=("Arial", 14, "bold"), command=self.login)
@@ -72,36 +73,39 @@ class LoginFrame(tk.Frame):
         add_hover_effect(su, "#007A4D", "#00A86B")
 
     def login(self):
-        user = self.username.get()
+        user = self.username.get().strip()
         pw = self.password.get()
 
         if not user or not pw:
             messagebox.showerror("Error", "All fields required")
             return
 
-        hashed = hashlib.sha256(pw.encode()).hexdigest()
-
-        try:
-            conn = db_connect()
-            cur = conn.cursor()
-            cur.execute(
-                "SELECT * FROM users WHERE username=%s AND password=%s",
-                (user, hashed)
-            )
-            result = cur.fetchone()
-            conn.close()
-        except Exception as e:
-            messagebox.showerror("Error", f"Database error: {str(e)}")
+        if self.failed_attempts >= 5:
+            messagebox.showerror("Blocked", "Too many failed attempts. Try later.")
             return
 
-        if result:
+        try:
+            with db_connect() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT password FROM users WHERE username=%s", (user,))
+                    result = cur.fetchone()
+        except Exception as e:
+            messagebox.showerror("Error", f"Database error: {e}")
+            return
+
+        if result and bcrypt.checkpw(pw.encode(), result[0].encode()):
+            # Generate random session token
+            token = secrets.token_hex(16)
             with open(SESSION_FILE, "w") as f:
-                f.write("logged_in")
+                f.write(token)
 
             messagebox.showinfo("Success", "Login Successful")
+            self.failed_attempts = 0
             self.controller.show_frame("MainDashboard")
         else:
-            messagebox.showerror("Error", "Invalid login")
+            self.failed_attempts += 1
+            messagebox.showerror("Error", f"Invalid login ({self.failed_attempts}/5)")
+
 
 
 # ================= SIGN UP FRAME =================
@@ -154,35 +158,45 @@ class SignUpFrame(tk.Frame):
         tk.Label(panel, text=text, bg="white").place(x=20, y=y)
         e = tk.Entry(panel, font=("Arial", 14), bg="#F0F0F0", bd=0, show="*" if hide else "")
         e.place(x=20, y=y + 30, width=250, height=35)
-        e.bind("<Button-1>", lambda event: e.focus_set())
         return e
 
     def signup(self):
-        user = self.username.get()
+        user = self.username.get().strip()
         pw = self.password.get()
         cpw = self.confirm.get()
 
         if not user or not pw:
             messagebox.showerror("Error", "All fields required")
             return
+
         if pw != cpw:
             messagebox.showerror("Error", "Passwords do not match")
             return
 
-        hashed = hashlib.sha256(pw.encode()).hexdigest()
+        # Password strength check
+        import re
+        if not re.match(r'^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[\W_]).{8,}$', pw):
+            messagebox.showerror(
+                "Error",
+                "Password must be 8+ chars, include upper & lower case letters, numbers and symbols"
+            )
+            return
+
+        hashed = bcrypt.hashpw(pw.encode(), bcrypt.gensalt()).decode()
 
         try:
-            conn = db_connect()
-            cur = conn.cursor()
-            cur.execute(
-                "INSERT INTO users (username, password) VALUES (%s,%s)",
-                (user, hashed)
-            )
-            conn.commit()
-            conn.close()
+            with db_connect() as conn:
+                with conn.cursor() as cur:
+                    # Check duplicate username
+                    cur.execute("SELECT 1 FROM users WHERE username=%s", (user,))
+                    if cur.fetchone():
+                        messagebox.showerror("Error", "Username already exists")
+                        return
+
+                    cur.execute("INSERT INTO users (username, password) VALUES (%s,%s)", (user, hashed))
+                    conn.commit()
 
             messagebox.showinfo("Success", "Account created")
             self.controller.show_frame("LoginFrame")
-        except:
-            messagebox.showerror("Error", "Username already exists")
-            return
+        except Exception as e:
+            messagebox.showerror("Error", f"Database error: {e}")

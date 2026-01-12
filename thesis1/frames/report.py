@@ -147,7 +147,7 @@ class Report(tk.Frame):
         return self.fetch_data("SELECT ID, Student_name, grade_lvl, created_at FROM student")
 
     def get_teachers(self):
-        return self.fetch_data("SELECT ID, Teacher_name, created_at FROM teacher")
+        return self.fetch_data("SELECT teacher_id, Teacher_name, created_at FROM teacher")
 
     def get_fetchers(self):
         return self.fetch_data("SELECT ID, fetcher_name, contact, created_at FROM fetcher")
