@@ -20,7 +20,7 @@ class Rfid(tk.Tk):
     def __init__(self):
         super().__init__()
 
-        self.title("RFID MANAGEMENT SYSTEM")
+        self.title("RFID MANAGEMENT SYSTEM - Cainta Catholic College ")
         self.geometry("1350x700+0+0")
 
         container = tk.Frame(self)
