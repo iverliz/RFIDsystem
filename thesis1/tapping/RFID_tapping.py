@@ -14,7 +14,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_PHOTO = os.path.join(BASE_DIR, "..", "assets", "default_photo.jfif")
 HISTORY_DIR = os.path.join(BASE_DIR, "history log")
 
-# ---------------- SERIAL ----------------
+# ---------------- SERIAL THREAD ----------------
 class SerialThread(QThread):
     uid_scanned = pyqtSignal(str)
 
@@ -34,14 +34,14 @@ class SerialThread(QThread):
         except Exception as e:
             print("Serial error:", e)
 
-# ---------------- MAIN ----------------
+# ---------------- MAIN WINDOW ----------------
 class RFIDTapping(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("RFID Fetcher - Student System")
         self.setGeometry(100, 100, 1300, 800)
 
-        # DB
+        # ---------------- DATABASE ----------------
         self.db = mysql.connector.connect(
             host="localhost",
             user="root",
@@ -50,16 +50,16 @@ class RFIDTapping(QMainWindow):
         )
         self.cursor = self.db.cursor(dictionary=True)
 
-        # STATE
+        # ---------------- STATE ----------------
         self.active_fetcher = None
         self.fetcher_students = []
         self.fetched_students = set()
         self.pending_student = None
 
-        # HOLDING QUEUE
+        # ---------------- HOLDING QUEUE ----------------
         self.holding = {}
 
-        # HISTORY
+        # ---------------- HISTORY ----------------
         os.makedirs(HISTORY_DIR, exist_ok=True)
         self.history_file = os.path.join(
             HISTORY_DIR, f"history_{datetime.now():%Y-%m-%d}.csv"
@@ -70,14 +70,18 @@ class RFIDTapping(QMainWindow):
                     ["Date", "Time", "Fetcher", "Student", "Status"]
                 )
 
+        # ---------------- UI ----------------
         self.init_ui()
 
-        # TIMERS
+        # ---------------- TIMERS ----------------
         self.fetcher_timer = QTimer(singleShot=True)
         self.fetcher_timer.timeout.connect(self.move_fetcher_to_holding)
 
         self.student_display_timer = QTimer(singleShot=True)
         self.student_display_timer.timeout.connect(self.reset_student_panel)
+
+        self.student_wait_timer = QTimer(singleShot=True)
+        self.student_wait_timer.timeout.connect(self.student_wait_timeout)
 
         self.clock_timer = QTimer()
         self.clock_timer.timeout.connect(self.update_clock)
@@ -87,7 +91,7 @@ class RFIDTapping(QMainWindow):
         self.holding_cleanup.timeout.connect(self.cleanup_holding)
         self.holding_cleanup.start(60000)
 
-        # SERIAL
+        # ---------------- SERIAL ----------------
         self.serial = SerialThread()
         self.serial.uid_scanned.connect(self.process_rfid)
         self.serial.start()
@@ -180,6 +184,7 @@ class RFIDTapping(QMainWindow):
         if student:
             for rfid, h in self.holding.items():
                 if student["Student_id"] in h["student_ids"]:
+                    self.student_wait_timer.stop()
                     self.activate_fetcher_from_holding(rfid, student)
                     return
 
@@ -187,11 +192,39 @@ class RFIDTapping(QMainWindow):
         fetcher = self.cursor.fetchone()
 
         if fetcher:
+            self.student_wait_timer.stop()
             self.activate_fetcher(fetcher)
             return
 
         if student:
             self.handle_student(student)
+
+    # ---------------- STUDENT FIRST ----------------
+    def handle_student(self, student):
+        if not self.active_fetcher:
+            self.pending_student = student
+
+            self.student_panel.image.setPixmap(self.load_photo(student.get("photo_path")))
+            self.student_panel.name.setText(student["Student_name"])
+            self.student_panel.info.setText(
+                f"ID: {student['Student_id']}\n"
+                f"Grade: {student['grade_lvl']}\n"
+                f"Teacher: {student['Teacher_name']}"
+            )
+
+            self.status.setText("STUDENT SCANNED – WAITING FOR FETCHER")
+
+            # ⏱ 7-second waiting window
+            self.student_wait_timer.start(7000)
+            return
+
+        self.try_pair(student)
+
+    def student_wait_timeout(self):
+        self.pending_student = None
+        self.reset_student_panel()
+        self.status.setText("WAITING FOR RFID...")
+        self.status.setStyleSheet("background:#6b7280;color:white;padding:10px;")
 
     # ---------------- FETCHER ----------------
     def activate_fetcher(self, fetcher):
@@ -233,45 +266,14 @@ class RFIDTapping(QMainWindow):
 
         self.try_pair(student)
 
-    # ---------------- STUDENT ----------------
-    def handle_student(self, student):
-        if not self.active_fetcher:
-            self.pending_student = student
-            self.student_panel.image.setPixmap(self.load_photo(student.get("photo_path")))
-            self.student_panel.name.setText(student["Student_name"])
-            self.student_panel.info.setText(
-                f"ID: {student['Student_id']}\n"
-                f"Grade: {student['grade_lvl']}\n"
-                f"Teacher: {student['Teacher_name']}"
-            )
-            self.status.setText("STUDENT SCANNED – WAITING FOR FETCHER")
-            return
-
-        self.try_pair(student)
-
-    # ---------------- STATUS RESET ----------------
-    def reset_status_waiting_student(self):
-        if self.active_fetcher:
-            self.status.setText("WAITING FOR STUDENT")
-            self.status.setStyleSheet(
-                "background:#6b7280;color:white;padding:10px;"
-            )
-
-    def move_fetcher_to_holding_after_duplicate(self):
-        if self.active_fetcher:
-            self.move_fetcher_to_holding()
-
-    # ---------------- PAIR ----------------
+    # ---------------- PAIRING (UNCHANGED LOGIC) ----------------
     def try_pair(self, student):
 
-        # 🚫 ALREADY FETCHED
         if student["Student_id"] in self.fetched_students:
             self.status.setText("STUDENT HAS ALREADY BEEN FETCHED")
-            self.status.setStyleSheet(
-                "background:#f59e0b;color:black;padding:10px;"
-            )
+            self.status.setStyleSheet("background:#f59e0b;color:black;padding:10px;")
             QTimer.singleShot(3000, self.reset_status_waiting_student)
-            QTimer.singleShot(3000, self.move_fetcher_to_holding_after_duplicate)
+            QTimer.singleShot(3000, self.move_fetcher_to_holding)
             return
 
         self.cursor.execute("""
@@ -307,7 +309,6 @@ class RFIDTapping(QMainWindow):
         if authorized:
             self.fetched_students.add(student["Student_id"])
             self.update_fetcher_student_list()
-            self.update_holding_display(self.active_fetcher["rfid"])
 
             if len(self.fetched_students) == len(self.fetcher_students):
                 self.remove_from_holding(self.active_fetcher["rfid"])
@@ -320,6 +321,9 @@ class RFIDTapping(QMainWindow):
 
     # ---------------- HOLDING ----------------
     def move_fetcher_to_holding(self):
+        if not self.active_fetcher:
+            return
+
         rfid = self.active_fetcher["rfid"]
 
         box = QFrame()
@@ -356,26 +360,16 @@ class RFIDTapping(QMainWindow):
 
         self.reset_all()
 
-    def update_holding_display(self, fetcher_rfid):
-        if fetcher_rfid not in self.holding:
-            return
-
-        holding = self.holding[fetcher_rfid]
-        for lbl, s in zip(holding["labels"], holding["students"]):
-            lbl.setStyleSheet(
-                "color:green" if s["Student_id"] in holding["fetched"] else "color:gray"
-            )
-
-    def remove_from_holding(self, fetcher_rfid):
-        if fetcher_rfid in self.holding:
-            self.holding[fetcher_rfid]["widget"].deleteLater()
-            del self.holding[fetcher_rfid]
-
     def cleanup_holding(self):
         now = datetime.now()
         for rfid in list(self.holding.keys()):
             if self.holding[rfid]["expires"] < now:
                 self.remove_from_holding(rfid)
+
+    def remove_from_holding(self, fetcher_rfid):
+        if fetcher_rfid in self.holding:
+            self.holding[fetcher_rfid]["widget"].deleteLater()
+            del self.holding[fetcher_rfid]
 
     # ---------------- HELPERS ----------------
     def get_students(self, rfid):
@@ -394,12 +388,17 @@ class RFIDTapping(QMainWindow):
             html += f"<span style='color:{color}'>• {s['Student_name']}</span><br>"
         self.fetcher_panel.info.setText(html)
 
+    def reset_status_waiting_student(self):
+        if self.active_fetcher:
+            self.status.setText("WAITING FOR STUDENT")
+            self.status.setStyleSheet("background:#6b7280;color:white;padding:10px;")
+
     def reset_student_panel(self):
         self.student_panel.image.setPixmap(self.load_photo(None))
         self.student_panel.name.setText("WAITING...")
         self.student_panel.info.setText("")
         self.status.setText("WAITING FOR RFID...")
-        self.status.setStyleSheet("background:#969696;color:white;padding:10px;")
+        self.status.setStyleSheet("background:#6b7280;color:white;padding:10px;")
 
     def reset_all(self):
         self.active_fetcher = None
@@ -413,6 +412,9 @@ class RFIDTapping(QMainWindow):
 
         self.reset_student_panel()
         self.fetcher_timer.stop()
+
+        self.status.setText("WAITING FOR RFID...")
+        self.status.setStyleSheet("background:#6b7280;color:white;padding:10px;")
 
     def save_history(self, fetcher, student, status):
         with open(self.history_file, "a", newline="", encoding="utf-8") as f:
