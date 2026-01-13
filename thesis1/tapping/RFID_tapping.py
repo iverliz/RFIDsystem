@@ -22,6 +22,7 @@ class SerialThread(QThread):
         super().__init__()
         self.port = port
         self.baud = baud
+        self.session_completed = False
 
     def run(self):
         try:
@@ -55,6 +56,8 @@ class RFIDTapping(QMainWindow):
         self.fetcher_students = []
         self.fetched_students = set()
         self.pending_student = None
+        self.completed_fetchers = set()
+        
 
         # ---------------- HOLDING QUEUE ----------------
         self.holding = {}
@@ -208,6 +211,22 @@ class RFIDTapping(QMainWindow):
         student = self.cursor.fetchone()
 
         if student:
+            self.cursor.execute(
+                "SELECT rfid FROM registrations WHERE student_id=%s",
+                (student["Student_id"],)
+            )
+            row = self.cursor.fetchone()
+
+            if row and row["rfid"] in self.completed_fetchers:
+                self.show_temp_status(
+                    "STUDENT ALREADY FETCHED - FETCHER COMPLETED",
+                    bg="#334155",
+                    fg="white"
+                
+                )
+                return
+
+        if student:
             for rfid, h in self.holding.items():
                 if student["Student_id"] in h["student_ids"]:
                     self.student_wait_timer.stop()
@@ -216,6 +235,14 @@ class RFIDTapping(QMainWindow):
 
         self.cursor.execute("SELECT * FROM fetcher WHERE rfid=%s", (uid,))
         fetcher = self.cursor.fetchone()
+
+        if fetcher and fetcher["rfid"] in self.completed_fetchers:
+            self.show_temp_status(
+                "FETCHER HAS COMPLETED ALL STUDENTS",
+                bg="#334155",
+                fg="white"
+            )
+            return
 
         if fetcher:
             self.student_wait_timer.stop()
@@ -281,7 +308,7 @@ class RFIDTapping(QMainWindow):
             self.try_pair(student)
             return
 
-        self.fetcher_timer.start(7000)
+        self.fetcher_timer.start(10000)
 
     def activate_fetcher_from_holding(self, fetcher_rfid, student):
         holding = self.holding[fetcher_rfid]
@@ -364,12 +391,13 @@ class RFIDTapping(QMainWindow):
             self.update_holding_display(self.active_fetcher["rfid"])
 
             if len(self.fetched_students) == len(self.fetcher_students):
+                self.completed_fetchers.add(self.active_fetcher["rfid"])
                 self.remove_from_holding(self.active_fetcher["rfid"])
                 QTimer.singleShot(3000, self.reset_all)
                 return
 
             # ⏱ normal waiting window
-            self.fetcher_timer.start(10000)
+            self.fetcher_timer.start(8000)
 
         self.student_display_timer.start(3000)
 
