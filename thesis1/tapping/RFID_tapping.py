@@ -115,12 +115,38 @@ class RFIDTapping(QMainWindow):
 
         self.title = QLabel("RFID Fetcher - Student System", alignment=Qt.AlignCenter)
         self.title.setFont(QFont("Segoe UI", 18, QFont.Bold))
-        self.title.setStyleSheet("background:#047857;color:white;padding:12px;")
+        self.title.setStyleSheet("""
+                        QLabel {
+                            color: white;
+                            padding: 12px;
+                            font-weight: bold;
+                            text-shadow: 1px 1px 2px rgba(0,0,0,120);
+                            background: qlineargradient(
+                                x1:0, y1:0,
+                                x2:1, y2:0,
+                                stop:0 #2563eb,   /* blue */
+                                stop:1 #eab308    /* slightly darker yellow */
+                            );
+                        }
+                    """)
+
+        # ---- DATE & TIME BOX ----
+        self.datetime_frame = QFrame()
+        self.datetime_frame.setStyleSheet(
+            "background:#d4d4d8;border-radius:10px;padding:3px;"
+        )
+
+        dt_layout = QVBoxLayout(self.datetime_frame)
+        dt_layout.setSpacing(2)
 
         self.date_label = QLabel(alignment=Qt.AlignCenter)
         self.time_label = QLabel(alignment=Qt.AlignCenter)
+
         self.date_label.setFont(QFont("Segoe UI", 12))
         self.time_label.setFont(QFont("Segoe UI", 16, QFont.Bold))
+
+        dt_layout.addWidget(self.date_label)
+        dt_layout.addWidget(self.time_label)
 
         self.status = QLabel("WAITING FOR RFID...", alignment=Qt.AlignCenter)
         self.status.setFont(QFont("Segoe UI", 14, QFont.Bold))
@@ -136,7 +162,7 @@ class RFIDTapping(QMainWindow):
         self.spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         for w in (
-            self.title, self.date_label, self.time_label,
+            self.title, self.datetime_frame,
             self.status, self.open_btn
         ):
             right.addWidget(w)
@@ -152,7 +178,7 @@ class RFIDTapping(QMainWindow):
         layout = QVBoxLayout(frame)
 
         lbl = QLabel(title, alignment=Qt.AlignCenter)
-        lbl.setFont(QFont("Segoe UI", 15, QFont.Bold))
+        lbl.setFont(QFont("Segoe UI", 25, QFont.Bold))
         lbl.setStyleSheet(f"background:{color};color:white;padding:8px;")
 
         img = QLabel(alignment=Qt.AlignCenter)
@@ -255,7 +281,7 @@ class RFIDTapping(QMainWindow):
             self.try_pair(student)
             return
 
-        self.fetcher_timer.start(10000)
+        self.fetcher_timer.start(7000)
 
     def activate_fetcher_from_holding(self, fetcher_rfid, student):
         holding = self.holding[fetcher_rfid]
@@ -365,7 +391,7 @@ class RFIDTapping(QMainWindow):
         # OUTER CARD
         box = QFrame()
         box.setStyleSheet(
-            "background:#e5e7eb;border-radius:10px;padding:10px;"
+            "background:#e5e7eb;border-radius:10px;padding:2px;"
         )
 
         # 🔁 HORIZONTAL LAYOUT
