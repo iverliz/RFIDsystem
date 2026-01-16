@@ -2,6 +2,9 @@ import sys, time, os, csv, subprocess, serial
 from datetime import datetime, timedelta
 import mysql.connector
 
+from PyQt5.QtMultimedia import QSoundEffect
+from PyQt5.QtCore import QUrl
+
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt5.QtGui import QPixmap, QFont
 from PyQt5.QtWidgets import (
@@ -13,6 +16,11 @@ from PyQt5.QtWidgets import (
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_PHOTO = os.path.join(BASE_DIR, "..", "assets", "default_photo.jfif")
 HISTORY_DIR = os.path.join(BASE_DIR, "history log")
+
+SOUND_DIR = os.path.join(BASE_DIR, "sound effect")
+
+AUTHORIZED_SOUND = os.path.join(SOUND_DIR, "authorized_sound.wav")
+DENIED_SOUND = os.path.join(SOUND_DIR, "denied_sound.wav")
 
 # ---------------- SERIAL THREAD ----------------
 class SerialThread(QThread):
@@ -98,6 +106,15 @@ class RFIDTapping(QMainWindow):
         self.serial = SerialThread()
         self.serial.uid_scanned.connect(self.process_rfid)
         self.serial.start()
+
+        # 🔊 SOUND EFFECTS (ADD THIS BLOCK)
+        self.sound_authorized = QSoundEffect()
+        self.sound_authorized.setSource(QUrl.fromLocalFile(AUTHORIZED_SOUND))
+        self.sound_authorized.setVolume(0.9)
+
+        self.sound_denied = QSoundEffect()
+        self.sound_denied.setSource(QUrl.fromLocalFile(DENIED_SOUND))
+        self.sound_denied.setVolume(0.9)
 
         self.reset_all()
 
@@ -363,6 +380,11 @@ class RFIDTapping(QMainWindow):
 
         authorized = self.cursor.fetchone() is not None
         status = "AUTHORIZED" if authorized else "DENIED"
+
+        if authorized:
+            self.sound_authorized.play()
+        else:
+            self.sound_denied.play()
 
         self.student_panel.image.setPixmap(self.load_photo(student.get("photo_path")))
         self.student_panel.name.setText(student["Student_name"])
