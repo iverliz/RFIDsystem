@@ -53,6 +53,7 @@ class MainDashboard(tk.Frame):
         # ================= MAIN AREA =================
         self.main_area = tk.Frame(self, bg="#e0f7fa")
         self.main_area.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
 
         # ================= TOP BAR =================
         self.topbar = tk.Frame(self.main_area, height=50, bg="#26c6da", bd=2, relief="groove")
@@ -137,3 +138,4 @@ class MainDashboard(tk.Frame):
 
         self.controller.show_frame("LoginFrame")
         tk.messagebox.showinfo("Logout", "You are now logged out.")
+        

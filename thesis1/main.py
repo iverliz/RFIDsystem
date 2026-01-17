@@ -45,14 +45,13 @@ class Rfid(tk.Tk):
             self.frames[FrameClass.__name__] = frame
             frame.place(relwidth=1, relheight=1)
 
-        # Initial screen
+        
         if os.path.exists(SESSION_FILE):
             self.show_frame("MainDashboard")
         else:
             self.show_frame("LoginFrame")
 
     def show_frame(self, name):
-        # Allow Login & SignUp without session
         if name not in ("LoginFrame", "SignUpFrame") and not os.path.exists(SESSION_FILE):
             name = "LoginFrame"
 
