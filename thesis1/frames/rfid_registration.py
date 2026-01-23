@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 import sys, os
 import serial, threading, time
+import serial.tools.list_ports # Added for auto-detection
 from PIL import Image, ImageTk
 
 # ================= PATH SETUP =================
@@ -138,6 +139,9 @@ class RfidRegistration(tk.Frame):
         self.lock_ui()
         self.load_data()
 
+        # Handle Port Closure on Exit
+        self.controller.protocol("WM_DELETE_WINDOW", self.on_close)
+
     # ================= UI BUILDERS =================
     def create_form(self, parent, title, fields, col):
         frame = tk.LabelFrame(parent, text=title, font=("Arial", 10, "bold"), bg="white", padx=10, pady=10)
@@ -179,33 +183,69 @@ class RfidRegistration(tk.Frame):
 
     # ================= SERIAL & RFID LOGIC =================
     def start_serial_thread(self):
-        try:
-            self.ser = serial.Serial("COM3", 9600, timeout=1)
-            threading.Thread(target=self.serial_listener, daemon=True).start()
-        except:
-            print("RFID Reader not found on COM3.")
+        def find_and_connect():
+            # 1. AUTO-DETECT PORT
+            ports = list(serial.tools.list_ports.comports())
+            target_port = None
+            
+            for p in ports:
+                if "USB" in p.description or "Serial" in p.description or "CH340" in p.description:
+                    target_port = p.device
+                    break
+            
+            if not target_port:
+                target_port = "COM3" # Fallback if detection fails
+
+            try:
+                # 2. Open connection
+                self.ser = serial.Serial(target_port, 9600, timeout=1)
+                
+                # 3. CRITICAL: Hardware reset delay
+                time.sleep(2) 
+                
+                print(f"Connected to RFID Reader on {target_port}")
+                threading.Thread(target=self.serial_listener, daemon=True).start()
+                
+            except serial.SerialException as e:
+                if "PermissionError" in str(e):
+                    # Show popup if port is busy
+                    self.after(100, lambda: messagebox.showerror("Access Denied", 
+                        f"Port {target_port} is busy!\n\nPlease close other scripts or Arduino Monitor."))
+                else:
+                    print(f"Connection failed: {e}")
+
+        threading.Thread(target=find_and_connect, daemon=True).start()
 
     def serial_listener(self):
         while self.ser and self.ser.is_open:
             try:
-                line = self.ser.readline().decode().strip()
+                line = self.ser.readline().decode('utf-8', errors='ignore').strip()
                 if line:
-                    self.after(0, lambda uid=line: self.handle_rfid_scan(uid))
-            except: break
+                    # Extract ID (handles "Tag ID: XXXXX" format)
+                    uid = line.split(":")[-1].strip()
+                    self.after(0, lambda u=uid: self.handle_rfid_scan(u))
+            except: 
+                break
 
     def handle_rfid_scan(self, uid):
         if self.add_btn["text"] != "SAVE PAIR" and not self.is_edit_mode:
-            return # Ignore scans if not in active mode
+            return 
 
-        # Logic: If Fetcher RFID is empty, fill it. Otherwise, fill Student RFID.
         if not self.rfid_var.get():
             self.rfid_var.set(uid)
             self.autofill_from_db("fetcher", uid)
         elif not self.student_rfid_var.get() and uid != self.rfid_var.get():
             self.student_rfid_var.set(uid)
             self.autofill_from_db("student", uid)
-            self.paired_rfid_var.set(uid) # Automatically pair them
+            self.paired_rfid_var.set(uid)
 
+    def on_close(self):
+        """Releases the COM port so other scripts can use it."""
+        if self.ser and self.ser.is_open:
+            self.ser.close()
+        self.controller.destroy()
+
+    # ================= (REST OF THE CODE) =================
     def autofill_from_db(self, type, uid):
         try:
             with db_connect() as conn:
@@ -232,7 +272,6 @@ class RfidRegistration(tk.Frame):
             label.config(image=photo, text="")
             label.image = photo
 
-    # ================= CRUD OPERATIONS =================
     def toggle_add(self):
         if self.add_btn["text"] == "NEW PAIRING":
             self.clear_all()
@@ -295,7 +334,6 @@ class RfidRegistration(tk.Frame):
                     conn.commit()
             self.reset_load()
 
-    # ================= DATA LOADING =================
     def load_data(self):
         self.table.delete(*self.table.get_children())
         offset = (self.current_page - 1) * self.page_size
@@ -334,7 +372,6 @@ class RfidRegistration(tk.Frame):
                     self.contact_var.set(r[5]); self.student_id_var.set(r[6])
                     self.student_name_var.set(r[7]); self.grade_var.set(r[8])
                     self.teacher_var.set(r[9]); self.paired_rfid_var.set(r[10])
-                    # Re-trigger photo display
                     self.autofill_from_db("fetcher", r[1])
                     self.autofill_from_db("student", r[3])
 
@@ -368,3 +405,32 @@ class RfidRegistration(tk.Frame):
         if self.current_page > 1:
             self.current_page -= 1
             self.load_data()
+            
+    def run(self):
+        target_port = "COM3" # Since you confirmed it's COM3
+        
+        # 1. THE AGGRESSIVE RESET
+        if self.ser and self.ser.is_open:
+            self.ser.close()
+            
+        try:
+            # 2. ATTEMPT TO FORCE OPEN
+            self.ser = serial.Serial()
+            self.ser.port = target_port
+            self.ser.baudrate = self.baud
+            self.ser.timeout = 1
+            self.ser.setDTR(False) # Prevents some Arduinos from hanging
+            self.ser.open()
+            
+            time.sleep(2) 
+            print(f"Successfully claimed {target_port}")
+            
+            while self.running:
+                if self.ser.in_waiting:
+                    line = self.ser.readline().decode(errors="ignore").strip()
+                    if line:
+                        uid = line.split(":")[-1].strip()
+                        self.uid_scanned.emit(uid)
+                self.msleep(100)
+        except Exception as e:
+            self.error_occurred.emit(str(e))

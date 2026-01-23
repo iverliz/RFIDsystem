@@ -54,7 +54,7 @@ class Rfid(tk.Tk):
     def show_frame(self, name):
         if name not in ("LoginFrame", "SignUpFrame") and not os.path.exists(SESSION_FILE):
             name = "LoginFrame"
-
+  
         if name == "LoginFrame":
             frame = self.frames["LoginFrame"]
             if hasattr(frame, "username"):
