@@ -1,7 +1,7 @@
 import tkinter as tk
 import os
 
-from frames.login import LoginFrame, SignUpFrame
+from frames.login import LoginFrame, SignUpFrame, ForgotPasswordFrame
 from frames.main_dashboard import MainDashboard
 from frames.student_record import StudentRecord
 from frames.teacher_record import TeacherRecord
@@ -10,7 +10,6 @@ from frames.rfid_registration import RfidRegistration
 from frames.history_log import RFIDHistory
 from frames.report import Report
 from frames.account import Account
-from frames.enrollthisyear import EnrollThisYear
 
 
 SESSION_FILE = "session.txt"
@@ -31,6 +30,7 @@ class Rfid(tk.Tk):
         for FrameClass in (
             LoginFrame,
             SignUpFrame,
+            ForgotPasswordFrame,
             MainDashboard,
             StudentRecord,
             TeacherRecord,
@@ -38,8 +38,7 @@ class Rfid(tk.Tk):
             RfidRegistration,
             RFIDHistory,
             Report,
-            Account,
-            EnrollThisYear
+            Account
         ):
             frame = FrameClass(container, self)
             self.frames[FrameClass.__name__] = frame
@@ -52,7 +51,7 @@ class Rfid(tk.Tk):
             self.show_frame("LoginFrame")
 
     def show_frame(self, name):
-        if name not in ("LoginFrame", "SignUpFrame") and not os.path.exists(SESSION_FILE):
+        if name not in ("LoginFrame", "SignUpFrame", "ForgotPasswordFrame") and not os.path.exists(SESSION_FILE):
             name = "LoginFrame"
   
         if name == "LoginFrame":

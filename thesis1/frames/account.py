@@ -4,7 +4,7 @@ import os
 import sys
 import bcrypt
 from datetime import datetime
-
+import re 
 # =================== PATH SETUP ===================
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
@@ -54,14 +54,14 @@ class Account(tk.Frame):
         table_frame = tk.Frame(content, bg="white", bd=1, relief="solid")
         table_frame.grid(row=1, column=0, sticky="nsew")
         
-        columns = ("id", "username", "created", "role")
+        columns = ("id","employee_id" ,"username", "created", "role")
         self.account_table = ttk.Treeview(table_frame, columns=columns, show="headings")
         
         # Table Styling
         style = ttk.Style()
         style.configure("Treeview.Heading", font=("Arial", 10, "bold"))
         
-        col_config = {"id": (60, "center"), "username": (250, "w"), "created": (180, "center"), "role": (120, "center")}
+        col_config = {"id": (60, "center"), "employee_id": (100, "center"), "username": (250, "w"), "created": (180, "center"), "role": (120, "center")}
         for col, (width, anchor) in col_config.items():
             self.account_table.heading(col, text=col.upper())
             self.account_table.column(col, width=width, anchor=anchor)
@@ -93,7 +93,7 @@ class Account(tk.Frame):
         try:
             with db_connect() as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT id, username, created_at, 'Administrator' FROM users ORDER BY id DESC")
+                cursor.execute("SELECT id, employee_id, username, created_at, 'Administrator' FROM users ORDER BY id DESC")
                 for row in cursor.fetchall():
                     self.account_table.insert("", "end", values=row)
         except Exception as e:
@@ -109,7 +109,7 @@ class Account(tk.Frame):
         try:
             with db_connect() as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT id, username, created_at, 'Administrator' FROM users WHERE username LIKE %s", (f"%{query}%",))
+                cursor.execute("SELECT id, employee_id, username, created_at, 'Administrator' FROM users WHERE username LIKE %s", (f"%{query}%",))
                 for row in cursor.fetchall():
                     self.account_table.insert("", "end", values=row)
         except Exception as e:
@@ -152,16 +152,19 @@ class ChangePasswordWindow(tk.Toplevel):
     def __init__(self, parent, user_data):
         super().__init__(parent)
         self.parent = parent
-        self.user_id = user_data[0]
+        # Assuming user_data now passes (employee_id, username)
+        self.employee_id = user_data[0] 
         self.username = user_data[1]
         
-        self.title(f"Security Update: {self.username}")
+        self.title(f"Security Update: ID {self.employee_id}")
         self.geometry("380x300")
         self.configure(padx=20, pady=20)
         self.resizable(False, False)
-        self.grab_set() # Focus modal
+        self.grab_set() 
 
-        tk.Label(self, text=f"Update Password for {self.username}", font=("Arial", 12, "bold")).pack(pady=(0, 20))
+        # Changed label to show Employee ID
+        tk.Label(self, text=f"Update Password for ID: {self.employee_id}", 
+                 font=("Arial", 12, "bold")).pack(pady=(0, 20))
 
         # Password Fields
         self.new_pass = self.create_input("New Password:")
@@ -169,7 +172,8 @@ class ChangePasswordWindow(tk.Toplevel):
 
         # Show password toggle
         self.show_var = tk.BooleanVar()
-        tk.Checkbutton(self, text="Show Passwords", variable=self.show_var, command=self.toggle_pass).pack(anchor="w")
+        tk.Checkbutton(self, text="Show Passwords", variable=self.show_var, 
+                       command=self.toggle_pass).pack(anchor="w")
 
         tk.Button(self, text="UPDATE PASSWORD", bg="#4CAF50", fg="white", font=("Arial", 10, "bold"),
                   height=2, command=self.save_password).pack(fill="x", pady=20)
@@ -186,23 +190,34 @@ class ChangePasswordWindow(tk.Toplevel):
         self.confirm_pass.config(show=char)
 
     def save_password(self):
-        p1 = self.new_pass.get()
-        p2 = self.confirm_pass.get()
+        new_password = self.new_pass.get()
+        confirm_password = self.confirm_pass.get()
 
-        if len(p1) < 8:
-            messagebox.showerror("Weak Password", "Password must be at least 8 characters long for security.")
+        # Regex for your specific password policy (8+ chars, Upper, Lower, Digit, Special)
+        password_regex = r'^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[\W_]).{8,}$'
+
+        if not re.match(password_regex, new_password):
+            messagebox.showerror("Weak Password", 
+                                 "Password must be 8+ characters, including uppercase, "
+                                 "lowercase, a number, and a special character.")
             return
-        if p1 != p2:
-            messagebox.showerror("Mismatch", "Passwords do not match. Please re-enter.")
+            
+        if new_password != confirm_password:
+            messagebox.showerror("Mismatch", "Passwords do not match.")
             return
 
         try:
-            hashed = hash_password(p1)
+            # Using bcrypt as per your previous code
+            hashed = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
+            
             with db_connect() as conn:
-                cursor = conn.cursor()
-                cursor.execute("UPDATE users SET password=%s WHERE id=%s", (hashed, self.user_id))
-                conn.commit()
-            messagebox.showinfo("Success", f"Password for '{self.username}' has been updated.")
+                with conn.cursor() as cursor:
+                    # CHANGED: Update WHERE clause to use employee_id
+                    cursor.execute("UPDATE users SET password=%s WHERE employee_id=%s", 
+                                   (hashed, self.employee_id))
+                    conn.commit()
+                    
+            messagebox.showinfo("Success", f"Password for Employee ID '{self.employee_id}' updated.")
             self.destroy()
         except Exception as e:
             messagebox.showerror("Error", f"Update failed: {e}")

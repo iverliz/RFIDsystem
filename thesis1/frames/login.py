@@ -82,6 +82,12 @@ class LoginFrame(tk.Frame):
                        command=lambda: self.controller.show_frame("SignUpFrame"))
         su.place(x=20, y=390, width=120, height=35)
         add_hover_effect(su, "#007A4D", "#00A86B")
+        
+        # Add this below your Sign Up button in login_panel()
+        forgot_btn = tk.Button(panel, text="Forgot Password?", fg="#0047AB", bg="white",
+                       bd=0, font=("Arial", 10, "underline"), cursor="hand2",
+                       command=lambda: self.controller.show_frame("ForgotPasswordFrame"))
+        forgot_btn.place(x=150, y=395)
 
     def login(self):
         user = self.username.get().strip()
@@ -268,5 +274,76 @@ class SignUpFrame(tk.Frame):
             messagebox.showinfo("Success", "Account created")
             self.controller.show_frame("LoginFrame")
 
+        except Exception as e:
+            messagebox.showerror("Error", f"Database error: {e}")
+
+
+# ================= FORGOT PASSWORD FRAME =================
+class ForgotPasswordFrame(tk.Frame):
+    def __init__(self, parent, controller):
+        super().__init__(parent, bg="#F5F5F5")
+        self.controller = controller
+        self.forgot_panel()
+
+    def forgot_panel(self):
+        panel = tk.Frame(self, width=400, height=500, bg="white", bd=2, relief="groove")
+        panel.place(relx=0.5, rely=0.5, anchor="center") # Centered
+        panel.pack_propagate(False)
+
+        tk.Label(panel, text="Reset Password", font=("Arial", 20, "bold"), 
+                 bg="white", fg="#0047AB").pack(pady=20)
+
+        # Inputs
+        tk.Label(panel, text="Username", bg="white").pack(anchor="w", padx=50)
+        self.username = tk.Entry(panel, font=("Arial", 12), bg="#F0F0F0")
+        self.username.pack(pady=5, padx=50, fill="x")
+
+        tk.Label(panel, text="Employee ID", bg="white").pack(anchor="w", padx=50)
+        self.employee_id = tk.Entry(panel, font=("Arial", 12), bg="#F0F0F0")
+        self.employee_id.pack(pady=5, padx=50, fill="x")
+
+        tk.Label(panel, text="New Password", bg="white").pack(anchor="w", padx=50)
+        self.new_pw = tk.Entry(panel, font=("Arial", 12), bg="#F0F0F0", show="*")
+        self.new_pw.pack(pady=5, padx=50, fill="x")
+
+        # Reset Button
+        btn = tk.Button(panel, text="Update Password", bg="#0047AB", fg="white",
+                        font=("Arial", 12, "bold"), command=self.reset_password)
+        btn.pack(pady=20, padx=50, fill="x")
+
+        # Back Button
+        back = tk.Button(panel, text="Back to Login", bg="#E0E0E0", 
+                         command=lambda: self.controller.show_frame("LoginFrame"))
+        back.pack(pady=5)
+
+    def reset_password(self):
+        user = self.username.get().strip()
+        emp_id = self.employee_id.get().strip()
+        new_pw = self.new_pw.get()
+
+        if not user or not emp_id or not new_pw:
+            messagebox.showerror("Error", "Please fill all fields")
+            return
+
+        # Basic password validation (reusing your logic)
+        if not re.match(r'^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[\W_]).{8,}$', new_pw):
+            messagebox.showerror("Error", "New password is too weak!")
+            return
+
+        hashed = bcrypt.hashpw(new_pw.encode(), bcrypt.gensalt()).decode()
+
+        try:
+            with db_connect() as conn:
+                with conn.cursor() as cur:
+                    # Check if the user and employee ID match
+                    cur.execute("SELECT * FROM users WHERE username=%s AND employee_id=%s", (user, emp_id))
+                    if cur.fetchone():
+                        cur.execute("UPDATE users SET password=%s WHERE username=%s AND employee_id=%s", 
+                                    (hashed, user, emp_id))
+                        conn.commit()
+                        messagebox.showinfo("Success", "Password updated successfully!")
+                        self.controller.show_frame("LoginFrame")
+                    else:
+                        messagebox.showerror("Error", "User details do not match our records.")
         except Exception as e:
             messagebox.showerror("Error", f"Database error: {e}")

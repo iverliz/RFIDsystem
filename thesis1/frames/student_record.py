@@ -14,7 +14,8 @@ from utils.database import db_connect
 PHOTO_DIR = os.path.join(BASE_DIR, "student_photos")
 os.makedirs(PHOTO_DIR, exist_ok=True)
 
-
+# Define the path for your default placeholder image
+DEFAULT_PHOTO = os.path.join(PHOTO_DIR, "default.png")
 class StudentRecord(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent, bg="#b2e5ed")
@@ -59,9 +60,20 @@ class StudentRecord(tk.Frame):
 
         self.upload_btn = tk.Button(self.left_box, text="Upload Photo", width=14, command=self.upload_photo)
         self.upload_btn.place(x=210, y=80)
-
+        
+        self.remove_photo_btn = tk.Button(
+            self.left_box, 
+            text="Remove Photo", 
+            width=14, 
+            fg="red",
+            command=self.remove_photo
+        )
+        self.remove_photo_btn.place(x=210, y=115) # Placed below Upload button
+        self.remove_photo_btn.config(state="disabled")
+        
         # Initially disable upload in VIEW MODE
         self.upload_btn.config(state="disabled")
+        self.remove_photo_btn.config(state="disabled")
 
         # ================= VARIABLES =================
         self.student_name_var = tk.StringVar()
@@ -232,9 +244,37 @@ class StudentRecord(tk.Frame):
 
         # INITIALIZE STATE
         self.set_fields_state("disabled")
+        self.display_photo(None)
         self.student_id_entry.config(state="disabled")
         self.load_data()
+    
+    def display_photo(self, path):
+        """Displays photo or shows placeholder if path is invalid/missing."""
+        try:
+            if path and os.path.exists(path):
+                img = Image.open(path).resize((160, 160))
+                self.photo = ImageTk.PhotoImage(img)
+                self.photo_label.config(image=self.photo, text="")
+                self.photo_label.image = self.photo
+            else:
+                # DEFAULT LOGIC applied from Student Record
+                self.photo_label.config(image="", text="NO PHOTO\nAVAILABLE", 
+                                        font=("Arial", 10, "bold"), fg="#666666")
+                self.photo = None
+        except Exception:
+            self.photo_label.config(image="", text="Error Loading Image")
+            
+    def upload_photo(self):
+        path = filedialog.askopenfilename(filetypes=[("Image Files", "*.jpg *.jpeg *.png")])
+        if path:
+            self.photo_path = path
+            self.display_photo(path)
 
+    def remove_photo(self):
+        """Clears the selection and reverts to default."""
+        self.photo_path = None
+        self.display_photo(None)
+    
     # ================= HELPERS & VALIDATION =================
     def only_numbers(self, v):
         return v.isdigit() or v == ""
@@ -256,6 +296,7 @@ class StudentRecord(tk.Frame):
             else:
                 entry.config(state=state)
         self.upload_btn.config(state=state)
+        self.remove_photo_btn.config(state=state)
 
     def reset_ui_state(self):
         """Returns buttons and labels to default VIEW MODE."""
@@ -308,7 +349,8 @@ class StudentRecord(tk.Frame):
             return
             
         selected_items = self.student_table.selection()
-        if not selected_items: return
+        if not selected_items: 
+            return
 
         selected = selected_items[0]
         student_id = self.student_table.item(selected, "values")[0]
@@ -319,6 +361,7 @@ class StudentRecord(tk.Frame):
                 student = cursor.fetchone()
 
         if student:
+            # Fill text variables
             self.student_id_var.set(student["Student_id"])
             self.student_name_var.set(student["Student_name"])
             self.grade_var.set(student["grade_lvl"])
@@ -326,34 +369,9 @@ class StudentRecord(tk.Frame):
             self.guardian_contact_var.set(student["Guardian_contact"])
             self.teacher_name_var.set(student["Teacher_name"])
 
-            if student["photo_path"] and os.path.exists(student["photo_path"]):
-                img = Image.open(student["photo_path"]).resize((160, 160))
-                self.photo = ImageTk.PhotoImage(img)
-                self.photo_label.config(image=self.photo)
-                self.photo_label.image = self.photo
-                self.photo_path = student["photo_path"]
-                
-            try:
-                if student["photo_path"] and os.path.exists(student["photo_path"]):
-                    img = Image.open(student["photo_path"]).resize((160, 160))
-                    self.photo = ImageTk.PhotoImage(img)
-                    self.photo_label.config(image=self.photo)
-                else:
-                # If file is missing, clear the photo label instead of crashing
-                    self.photo_label.config(image="")
-                    self.photo_path = None
-            except Exception as e:
-                print(f"Image load error: {e}")
-                self.photo_label.config(image="")
-
-    def upload_photo(self):
-        path = filedialog.askopenfilename(filetypes=[("Image Files", "*.jpg *.jpeg *.png")])
-        if path:
-            img = Image.open(path).resize((160, 160))
-            self.photo = ImageTk.PhotoImage(img)
-            self.photo_label.config(image=self.photo)
-            self.photo_label.image = self.photo
-            self.photo_path = path
+            # Handle photo via standardized method
+            self.photo_path = student["photo_path"]
+            self.display_photo(self.photo_path)
 
     def add_student(self):
         # STEP 1: If in View Mode, Switch to Add Mode
@@ -369,13 +387,19 @@ class StudentRecord(tk.Frame):
         # STEP 2: If in Add Mode (SAVE clicked), process DB
         error = self.validate()
         if error: return messagebox.showerror("Error", error)
-        if not self.photo_path: return messagebox.showerror("Error", "Photo is required")
+       
 
         sid = self.student_id_var.get()
         if self.student_id_exists(sid): return messagebox.showerror("Error", "ID already exists")
 
-        img_save = os.path.join(PHOTO_DIR, f"student_{sid}_{int(time.time())}.jpg")
-        Image.open(self.photo_path).save(img_save)
+        img_save = None
+        if self.photo_path and os.path.exists(self.photo_path):
+            img_save = os.path.join(PHOTO_DIR, f"student_{sid}_{int(time.time())}.jpg")
+            # Only save if it's not already in the target directory
+            if not self.photo_path.startswith(PHOTO_DIR):
+                Image.open(self.photo_path).convert("RGB").save(img_save)
+            else:
+                img_save = self.photo_path
 
         with db_connect() as conn:
             with conn.cursor() as cursor:
@@ -407,55 +431,98 @@ class StudentRecord(tk.Frame):
 
     def edit_student(self):
         error = self.validate()
-        if error: return messagebox.showerror("Error", error)
+        if error: 
+            return messagebox.showerror("Error", error)
 
         new_id = self.student_id_var.get()
+        # Check if user is trying to change ID to one that already exists
         if new_id != self.original_student_id and self.student_id_exists(new_id):
             return messagebox.showerror("Error", "ID already exists")
 
-        photo_sql = ""
-        params = [self.student_name_var.get(), self.grade_var.get(), self.guardian_name_var.get(),
-                  self.guardian_contact_var.get(), self.teacher_name_var.get()]
+        # Start building the SQL and Parameters dynamically
+        sql_parts = [
+            "Student_name=%s", "grade_lvl=%s", "Guardian_name=%s", 
+            "Guardian_contact=%s", "Teacher_name=%s", "Student_id=%s"
+        ]
+        params = [
+            self.student_name_var.get(), self.grade_var.get(), 
+            self.guardian_name_var.get(), self.guardian_contact_var.get(), 
+            self.teacher_name_var.get(), new_id
+        ]
 
-        # Update photo only if it's a new path (not the one currently in PHOTO_DIR)
+        # Handle Photo Update: Only save if a NEW photo was picked
         if self.photo_path and not self.photo_path.startswith(PHOTO_DIR):
-            img_save = os.path.join(PHOTO_DIR, f"student_{new_id}_{int(time.time())}.jpg")
-            Image.open(self.photo_path).save(img_save)
-            photo_sql = ", photo_path=%s"
-            params.append(img_save)
+            try:
+                img_save = os.path.join(PHOTO_DIR, f"student_{new_id}_{int(time.time())}.jpg")
+                # Convert to RGB handles PNG transparency/RGBA issues before saving as JPG
+                Image.open(self.photo_path).convert("RGB").save(img_save)
+                
+                sql_parts.append("photo_path=%s")
+                params.append(img_save)
+            except Exception as e:
+                return messagebox.showerror("Error", f"Failed to save image: {e}")
 
+        # Finalize Query
+        query = f"UPDATE student SET {', '.join(sql_parts)} WHERE Student_id=%s"
         params.append(self.original_student_id)
         
-        with db_connect() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(f"""UPDATE student SET Student_name=%s, grade_lvl=%s, Guardian_name=%s, 
-                               Guardian_contact=%s, Teacher_name=%s {photo_sql} 
-                               WHERE Student_id=%s""", params)
-                conn.commit()
-
-        messagebox.showinfo("Success", "Updated")
-        self.reset_ui_state()
-        self.load_data()
-
+        try:
+            with db_connect() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(query, params)
+                    conn.commit()
+            
+            messagebox.showinfo("Success", "Student record updated successfully")
+            self.reset_ui_state()
+            self.load_data()
+        except Exception as e:
+            messagebox.showerror("Database Error", f"Update failed: {e}")
+        
+        
+        
     def delete_student(self):
-        # If in ADD/EDIT mode, this button acts as CANCEL
+        # 1. Handle the "CANCEL" state first
         if self.delete_btn["text"] == "CANCEL":
             self.reset_ui_state()
             return
 
+        # 2. Check if a student is actually selected
         sid = self.student_id_var.get()
-        if not sid: return messagebox.showwarning("Warning", "Select a student")
-        if not messagebox.askyesno("Confirm", f"Delete Student {sid}?"): return
+        if not sid:
+            return messagebox.showwarning("Warning", "Please select a student record from the table to delete.")
 
-        with db_connect() as conn:
-            with conn.cursor() as cursor:
-                # Optional: Delete the actual file from disk here
-                cursor.execute("DELETE FROM student WHERE Student_id=%s", (sid,))
-                conn.commit()
+        # 3. Confirm with the user
+        confirm = messagebox.askyesno("Confirm Delete", f"Are you sure you want to permanently delete Student ID: {sid}?\nThis will also delete their photo.")
+        if not confirm:
+            return
 
-        messagebox.showinfo("Success", "Deleted")
-        self.clear_fields()
-        self.load_data()
+        try:
+            with db_connect() as conn:
+                with conn.cursor() as cursor:
+                    # FETCH PHOTO PATH BEFORE DELETING THE ROW
+                    cursor.execute("SELECT photo_path FROM student WHERE Student_id=%s", (sid,))
+                    result = cursor.fetchone()
+                    
+                    # DELETE FROM DATABASE
+                    cursor.execute("DELETE FROM student WHERE Student_id=%s", (sid,))
+                    conn.commit()
+
+            # 4. FILE SYSTEM CLEANUP
+            # If a photo path exists and isn't the default image, delete it from the folder
+            if result and result[0]:
+                file_path = result[0]
+                if os.path.exists(file_path) and file_path != DEFAULT_PHOTO:
+                    try:
+                        os.remove(file_path)
+                    except Exception as e:
+                        print(f"File deletion error: {e}") # Non-critical error, just log it
+
+            messagebox.showinfo("Success", f"Record for Student {sid} has been deleted.")
+            self.clear_fields()
+            self.load_data()
+
+        except Exception as e:
+            messagebox.showerror("Database Error", f"Could not delete record: {e}")
 
     # ================= SMART PAGINATION & SEARCH =================
     def load_data(self):
@@ -481,50 +548,71 @@ class StudentRecord(tk.Frame):
         
     def search_student(self):
         keyword = self.search_var.get().strip()
-        if not keyword: return self.load_data()
+        
+        # If the search box is empty, just reload the full list
+        if not keyword: 
+            return self.clear_search()
 
-        with db_connect() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute("""SELECT Student_id, Student_name, grade_lvl FROM student 
-                               WHERE Student_name LIKE %s OR Student_id LIKE %s""", 
-                               (f"%{keyword}%", f"%{keyword}%"))
-                self.search_results = cursor.fetchall()
+        try:
+            with db_connect() as conn:
+                with conn.cursor() as cursor:
+                    # Using LOWER() and LIKE for better matching
+                    query = """SELECT Student_id, Student_name, grade_lvl FROM student 
+                               WHERE Student_name LIKE %s OR Student_id LIKE %s"""
+                    cursor.execute(query, (f"%{keyword}%", f"%{keyword}%"))
+                    self.search_results = cursor.fetchall()
 
-        if not self.search_results:
-            self.student_table.delete(*self.student_table.get_children())
-            self.count_var.set("No results")
-            return
+            if not self.search_results:
+                self.student_table.delete(*self.student_table.get_children())
+                self.count_var.set("No results found.")
+                return
 
-        self.search_page = 1
-        self.update_search_table()
+            # Reset search pagination to page 1
+            self.search_page = 1
+            self.update_search_table()
+            
+        except Exception as e:
+            messagebox.showerror("Search Error", f"An error occurred: {e}")
 
+     
     def update_search_table(self):
+        """Refreshes the Treeview with search results based on current search_page."""
         self.student_table.delete(*self.student_table.get_children())
+        
         start = (self.search_page - 1) * self.page_size
         end = start + self.page_size
-        for row in self.search_results[start:end]: self.student_table.insert("", "end", values=row)
+        
+        page_data = self.search_results[start:end]
+        for row in page_data: 
+            self.student_table.insert("", "end", values=row)
         
         total_p = max(1, (len(self.search_results) + self.page_size - 1) // self.page_size)
-        self.count_var.set(f"Found: {len(self.search_results)} | Page {self.search_page}/{total_p}")
+        self.count_var.set(f"Matches: {len(self.search_results)} | Page {self.search_page}/{total_p}")
 
     def clear_search(self):
         self.search_var.set("")
-        self.current_page = 1
+        self.search_results = []
+        self.current_page = 1 
         self.load_data()
 
     def next_page(self):
-        if self.search_var.get().strip(): # If searching
+        # Determine if we are navigating Search Results or the Full List
+        is_searching = bool(self.search_var.get().strip())
+
+        if is_searching:
             if self.search_page * self.page_size < len(self.search_results):
                 self.search_page += 1
                 self.update_search_table()
-        else: # Regular browsing
+        else:
             if self.current_page * self.page_size < self.total_students:
                 self.current_page += 1
                 self.load_data()
 
     def prev_page(self):
-        if self.search_var.get().strip():
-            if self.search_page > 1:
+        is_searching = bool(self.search_var.get().strip())
+
+        if is_searching:
+            if self.search_page > 1: 
                 self.search_page -= 1
                 self.update_search_table()
         else:

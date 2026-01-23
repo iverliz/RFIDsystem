@@ -8,7 +8,6 @@ from frames.teacher_record import TeacherRecord
 from frames.student_record import StudentRecord
 from frames.fetcher_record import FetcherRecord
 from frames.rfid_registration import RfidRegistration
-from frames.enrollthisyear import EnrollThisYear
 
 SESSION_FILE = "session.txt"
 
@@ -45,7 +44,6 @@ class MainDashboard(tk.Frame):
         self.create_menu_button("Teacher Record", TeacherRecord)
         self.create_menu_button("Fetcher Record", FetcherRecord)
         self.create_menu_button("RFID Registration", RfidRegistration)
-        self.create_menu_button("Enroll This Year", EnrollThisYear)
         self.create_menu_button("History Log", RFIDHistory)
         self.create_menu_button("Account Settings", Account)
         self.create_menu_button("Reports", Report)
