@@ -51,15 +51,22 @@ class Rfid(tk.Tk):
             self.show_frame("LoginFrame")
 
     def show_frame(self, name):
+        # 1. First, tell the RFID page to STOP if we are leaving it
+        if "RfidRegistration" in self.frames:
+            self.frames["RfidRegistration"].stop_listening()
+
         if name not in ("LoginFrame", "SignUpFrame", "ForgotPasswordFrame") and not os.path.exists(SESSION_FILE):
             name = "LoginFrame"
   
+        # 2. Existing Login cleanup logic...
         if name == "LoginFrame":
             frame = self.frames["LoginFrame"]
-            if hasattr(frame, "username"):
-                frame.username.delete(0, tk.END)
-            if hasattr(frame, "password"):
-                frame.password.delete(0, tk.END)
+            if hasattr(frame, "username"): frame.username.delete(0, tk.END)
+            if hasattr(frame, "password"): frame.password.delete(0, tk.END)
+
+        # 3. If we are entering the Registration page, START the serial connection
+        if name == "RfidRegistration":
+            self.frames[name].start_listening()
 
         self.frames[name].tkraise()
 

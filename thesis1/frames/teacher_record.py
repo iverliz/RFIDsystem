@@ -4,6 +4,7 @@ from PIL import ImageTk, Image
 import os
 import time
 import sys
+import io 
 
 # ================= PATH SETUP =================
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -11,11 +12,9 @@ sys.path.append(BASE_DIR)
 
 from utils.database import db_connect
 
-PHOTO_DIR = os.path.join(BASE_DIR, "teacher_photos")
-os.makedirs(PHOTO_DIR, exist_ok=True)
 
 # Define the path for your default placeholder image
-DEFAULT_PHOTO = os.path.join(PHOTO_DIR, "default.png")
+
 
 class TeacherRecord(tk.Frame):
     def __init__(self, parent, controller):
@@ -134,20 +133,26 @@ class TeacherRecord(tk.Frame):
         self.load_teachers()
 
     # ================= HELPERS & UI CONTROL =================
-    def display_photo(self, path):
-        """Displays photo or shows placeholder if path is invalid/missing."""
+    def display_photo(self, data):
+        """Displays photo from BLOB data or shows placeholder."""
         try:
-            if path and os.path.exists(path):
-                img = Image.open(path).resize((160, 160))
+            if data:
+                # If data is bytes (from DB), use BytesIO. If it's a string (file path from upload), open directly.
+                if isinstance(data, bytes):
+                    stream = io.BytesIO(data)
+                    img = Image.open(stream).resize((160, 160))
+                else:
+                    img = Image.open(data).resize((160, 160))
+                
                 self.photo = ImageTk.PhotoImage(img)
                 self.photo_label.config(image=self.photo, text="")
                 self.photo_label.image = self.photo
             else:
-                # DEFAULT LOGIC applied from Student Record
                 self.photo_label.config(image="", text="NO PHOTO\nAVAILABLE", 
                                         font=("Arial", 10, "bold"), fg="#666666")
                 self.photo = None
-        except Exception:
+        except Exception as e:
+            print(f"Photo display error: {e}")
             self.photo_label.config(image="", text="Error Loading Image")
 
     def upload_photo(self):
@@ -208,16 +213,18 @@ class TeacherRecord(tk.Frame):
         if error: return messagebox.showerror("Error", error)
 
         try:
-            photo_save = None
-            if self.photo_path:
-                filename = f"t_{int(time.time())}.jpg"
-                photo_save = os.path.join(PHOTO_DIR, filename)
-                Image.open(self.photo_path).convert("RGB").save(photo_save, "JPEG")
+            binary_photo = None
+            # Convert the selected file path into Binary Data
+            if self.photo_path and os.path.exists(self.photo_path):
+                img = Image.open(self.photo_path).convert("RGB")
+                img_byte_arr = io.BytesIO()
+                img.save(img_byte_arr, format='JPEG')
+                binary_photo = img_byte_arr.getvalue()
 
             with db_connect() as conn:
                 with conn.cursor() as cursor:
                     cursor.execute("INSERT INTO teacher (teacher_name, teacher_grade, photo_path) VALUES (%s, %s, %s)",
-                                   (self.teacher_name_var.get().strip(), int(self.teacher_grade_var.get()), photo_save))
+                                   (self.teacher_name_var.get().strip(), int(self.teacher_grade_var.get()), binary_photo))
                     conn.commit()
             
             messagebox.showinfo("Success", "Teacher added successfully")
@@ -225,6 +232,68 @@ class TeacherRecord(tk.Frame):
             self.load_teachers()
         except Exception as e:
             messagebox.showerror("Database Error", f"Error saving teacher: {e}")
+
+    def update_teacher_db(self):
+        error = self.validate_fields()
+        if error: return messagebox.showerror("Error", error)
+
+        try:
+            binary_photo = None
+            sql_parts = ["teacher_name=%s", "teacher_grade=%s"]
+            params = [self.teacher_name_var.get().strip(), int(self.teacher_grade_var.get())]
+
+            # Logic for updating photo
+            if self.photo_path is None:
+                # User clicked 'Remove Photo'
+                sql_parts.append("photo_path=NULL")
+            elif isinstance(self.photo_path, bytes):
+                # Photo wasn't changed (it's still the bytes we loaded from DB)
+                pass 
+            else:
+                # photo_path is a string (new file selected via upload button)
+                img = Image.open(self.photo_path).convert("RGB")
+                img_byte_arr = io.BytesIO()
+                img.save(img_byte_arr, format='JPEG')
+                binary_photo = img_byte_arr.getvalue()
+                sql_parts.append("photo_path=%s")
+                params.append(binary_photo)
+
+            params.append(self.current_teacher_id)
+            query = f"UPDATE teacher SET {', '.join(sql_parts)} WHERE teacher_id=%s"
+
+            with db_connect() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(query, params)
+                    conn.commit()
+            messagebox.showinfo("Success", "Teacher record updated")
+            self.reset_ui_state()
+            self.load_teachers()
+        except Exception as e:
+            messagebox.showerror("Error", f"Update failed: {e}")
+
+    def on_select(self, _):
+        if self.edit_mode or self.add_btn["text"] == "SAVE": return
+        
+        sel = self.teacher_table.focus()
+        if not sel: return
+        
+        data = self.teacher_table.item(sel, "values")
+        self.current_teacher_id = data[0]
+        self.teacher_name_var.set(data[1])
+        self.teacher_grade_var.set(data[2])
+
+        try:
+            with db_connect() as conn:
+                with conn.cursor() as cursor:
+                    # Fetch the BLOB data
+                    cursor.execute("SELECT photo_path FROM teacher WHERE teacher_id=%s", (self.current_teacher_id,))
+                    row = cursor.fetchone()
+                    # row[0] is now raw binary data, not a path string
+                    self.photo_path = row[0] if row else None
+                    self.display_photo(self.photo_path)
+        except Exception as e:
+            print(f"Error loading teacher photo: {e}")
+            self.display_photo(None)
 
     def enable_edit_mode(self):
         if not self.current_teacher_id:
@@ -237,38 +306,7 @@ class TeacherRecord(tk.Frame):
         self.update_btn.config(state="normal")
         self.edit_label.config(text="EDIT MODE", fg="white", bg="red")
 
-    def update_teacher_db(self):
-        error = self.validate_fields()
-        if error: return messagebox.showerror("Error", error)
-
-        # Dynamic SQL build
-        sql_parts = ["teacher_name=%s", "teacher_grade=%s"]
-        params = [self.teacher_name_var.get().strip(), int(self.teacher_grade_var.get())]
-
-        # Handling photo updates (Defaulting/Removing)
-        if self.photo_path is None:
-            sql_parts.append("photo_path=NULL")
-        elif not self.photo_path.startswith(PHOTO_DIR):
-            filename = f"t_{int(time.time())}.jpg"
-            photo_save = os.path.join(PHOTO_DIR, filename)
-            Image.open(self.photo_path).convert("RGB").save(photo_save, "JPEG")
-            sql_parts.append("photo_path=%s")
-            params.append(photo_save)
-
-        params.append(self.current_teacher_id)
-        query = f"UPDATE teacher SET {', '.join(sql_parts)} WHERE teacher_id=%s"
-
-        try:
-            with db_connect() as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute(query, params)
-                    conn.commit()
-            messagebox.showinfo("Success", "Teacher record updated")
-            self.reset_ui_state()
-            self.load_teachers()
-        except Exception as e:
-            messagebox.showerror("Error", f"Update failed: {e}")
-
+    
     def delete_teacher(self):
         if self.delete_btn["text"] == "CANCEL":
             self.reset_ui_state()
@@ -357,24 +395,4 @@ class TeacherRecord(tk.Frame):
             self.current_page -= 1
             self.load_teachers()
 
-    def on_select(self, _):
-        if self.edit_mode or self.add_btn["text"] == "SAVE": return
-        
-        sel = self.teacher_table.focus()
-        if not sel: return
-        
-        data = self.teacher_table.item(sel, "values")
-        self.current_teacher_id = data[0]
-        self.teacher_name_var.set(data[1])
-        self.teacher_grade_var.set(data[2])
-
-        try:
-            with db_connect() as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute("SELECT photo_path FROM teacher WHERE teacher_id=%s", (self.current_teacher_id,))
-                    row = cursor.fetchone()
-                    path = row[0] if row else None
-                    self.photo_path = path
-                    self.display_photo(path)
-        except:
-            self.display_photo(None)
+    

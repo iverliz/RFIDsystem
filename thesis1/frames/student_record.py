@@ -4,18 +4,15 @@ from PIL import ImageTk, Image
 import os
 import sys
 import time
-
+import io 
 # ================= PATH SETUP =================
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
 
 from utils.database import db_connect
 
-PHOTO_DIR = os.path.join(BASE_DIR, "student_photos")
-os.makedirs(PHOTO_DIR, exist_ok=True)
 
 # Define the path for your default placeholder image
-DEFAULT_PHOTO = os.path.join(PHOTO_DIR, "default.png")
 class StudentRecord(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent, bg="#b2e5ed")
@@ -248,20 +245,26 @@ class StudentRecord(tk.Frame):
         self.student_id_entry.config(state="disabled")
         self.load_data()
     
-    def display_photo(self, path):
-        """Displays photo or shows placeholder if path is invalid/missing."""
+    def display_photo(self, data):
         try:
-            if path and os.path.exists(path):
-                img = Image.open(path).resize((160, 160))
+            if data:
+            # If data is bytes (from DB), use BytesIO. 
+            # If it's a string (path from file dialog), open directly.
+                if isinstance(data, bytes):
+                    stream = io.BytesIO(data)
+                    img = Image.open(stream).resize((160, 160))
+                else:
+                    img = Image.open(data).resize((160, 160))
+            
                 self.photo = ImageTk.PhotoImage(img)
                 self.photo_label.config(image=self.photo, text="")
                 self.photo_label.image = self.photo
             else:
-                # DEFAULT LOGIC applied from Student Record
                 self.photo_label.config(image="", text="NO PHOTO\nAVAILABLE", 
-                                        font=("Arial", 10, "bold"), fg="#666666")
+                                    font=("Arial", 10, "bold"), fg="#666666")
                 self.photo = None
-        except Exception:
+        except Exception as e:
+            print(f"Photo display error: {e}")
             self.photo_label.config(image="", text="Error Loading Image")
             
     def upload_photo(self):
@@ -390,27 +393,27 @@ class StudentRecord(tk.Frame):
        
 
         sid = self.student_id_var.get()
-        if self.student_id_exists(sid): return messagebox.showerror("Error", "ID already exists")
+        binary_photo = None
 
-        img_save = None
+    # Convert image file to Binary (BLOB)
         if self.photo_path and os.path.exists(self.photo_path):
-            img_save = os.path.join(PHOTO_DIR, f"student_{sid}_{int(time.time())}.jpg")
-            # Only save if it's not already in the target directory
-            if not self.photo_path.startswith(PHOTO_DIR):
-                Image.open(self.photo_path).convert("RGB").save(img_save)
-            else:
-                img_save = self.photo_path
+            img = Image.open(self.photo_path).convert("RGB")
+            img_byte_arr = io.BytesIO()
+            img.save(img_byte_arr, format='JPEG')
+            binary_photo = img_byte_arr.getvalue() # This is the raw data for the DB
 
         with db_connect() as conn:
             with conn.cursor() as cursor:
-                cursor.execute("""INSERT INTO student (Student_name, Student_id, grade_lvl, 
-                               Guardian_name, Guardian_contact, Teacher_name, photo_path)
-                               VALUES (%s,%s,%s,%s,%s,%s,%s)""", 
-                               (self.student_name_var.get(), sid, self.grade_var.get(), 
-                                self.guardian_name_var.get(), self.guardian_contact_var.get(), 
-                                self.teacher_name_var.get(), img_save))
+            # Note: We pass binary_photo directly into the values
+                query = """INSERT INTO student (Student_name, Student_id, grade_lvl, 
+                       Guardian_name, Guardian_contact, Teacher_name, photo_path)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s)"""
+                cursor.execute(query, (
+                    self.student_name_var.get(), sid, self.grade_var.get(), 
+                    self.guardian_name_var.get(), self.guardian_contact_var.get(), 
+                    self.teacher_name_var.get(), binary_photo
+                ))
                 conn.commit()
-
         messagebox.showinfo("Success", "Student added")
         self.reset_ui_state()
         self.load_data()
@@ -431,98 +434,67 @@ class StudentRecord(tk.Frame):
 
     def edit_student(self):
         error = self.validate()
-        if error: 
-            return messagebox.showerror("Error", error)
+        if error: return messagebox.showerror("Error", error)
 
         new_id = self.student_id_var.get()
-        # Check if user is trying to change ID to one that already exists
         if new_id != self.original_student_id and self.student_id_exists(new_id):
             return messagebox.showerror("Error", "ID already exists")
 
-        # Start building the SQL and Parameters dynamically
-        sql_parts = [
-            "Student_name=%s", "grade_lvl=%s", "Guardian_name=%s", 
-            "Guardian_contact=%s", "Teacher_name=%s", "Student_id=%s"
-        ]
-        params = [
-            self.student_name_var.get(), self.grade_var.get(), 
-            self.guardian_name_var.get(), self.guardian_contact_var.get(), 
-            self.teacher_name_var.get(), new_id
-        ]
+    # Dynamic SQL build
+        sql_parts = ["Student_name=%s", "grade_lvl=%s", "Guardian_name=%s", 
+                 "Guardian_contact=%s", "Teacher_name=%s", "Student_id=%s"]
+        params = [self.student_name_var.get(), self.grade_var.get(), 
+              self.guardian_name_var.get(), self.guardian_contact_var.get(), 
+              self.teacher_name_var.get(), new_id]
 
-        # Handle Photo Update: Only save if a NEW photo was picked
-        if self.photo_path and not self.photo_path.startswith(PHOTO_DIR):
-            try:
-                img_save = os.path.join(PHOTO_DIR, f"student_{new_id}_{int(time.time())}.jpg")
-                # Convert to RGB handles PNG transparency/RGBA issues before saving as JPG
-                Image.open(self.photo_path).convert("RGB").save(img_save)
-                
-                sql_parts.append("photo_path=%s")
-                params.append(img_save)
-            except Exception as e:
-                return messagebox.showerror("Error", f"Failed to save image: {e}")
+    # Handle Photo Update (BLOB Style)
+        if self.photo_path is None:
+        # User clicked 'Remove Photo'
+            sql_parts.append("photo_path=NULL")
+        elif isinstance(self.photo_path, bytes):
+        # Photo hasn't changed (still the bytes from DB)
+            pass 
+        else:
+        # photo_path is a string (new file selected)
+            img = Image.open(self.photo_path).convert("RGB")
+            img_byte_arr = io.BytesIO()
+            img.save(img_byte_arr, format='JPEG')
+            sql_parts.append("photo_path=%s")
+            params.append(img_byte_arr.getvalue())
 
-        # Finalize Query
-        query = f"UPDATE student SET {', '.join(sql_parts)} WHERE Student_id=%s"
         params.append(self.original_student_id)
-        
+        query = f"UPDATE student SET {', '.join(sql_parts)} WHERE Student_id=%s"
+    
         try:
             with db_connect() as conn:
                 with conn.cursor() as cursor:
                     cursor.execute(query, params)
                     conn.commit()
-            
-            messagebox.showinfo("Success", "Student record updated successfully")
+            messagebox.showinfo("Success", "Student record updated")
             self.reset_ui_state()
             self.load_data()
         except Exception as e:
-            messagebox.showerror("Database Error", f"Update failed: {e}")
-        
-        
-        
+            messagebox.showerror("Error", f"Update failed: {e}")
     def delete_student(self):
-        # 1. Handle the "CANCEL" state first
         if self.delete_btn["text"] == "CANCEL":
             self.reset_ui_state()
             return
 
-        # 2. Check if a student is actually selected
         sid = self.student_id_var.get()
-        if not sid:
-            return messagebox.showwarning("Warning", "Please select a student record from the table to delete.")
+        if not sid: return messagebox.showwarning("Warning", "Select a student first")
 
-        # 3. Confirm with the user
-        confirm = messagebox.askyesno("Confirm Delete", f"Are you sure you want to permanently delete Student ID: {sid}?\nThis will also delete their photo.")
-        if not confirm:
-            return
+        if not messagebox.askyesno("Confirm", "Delete this student and their photo?"): return
 
         try:
             with db_connect() as conn:
                 with conn.cursor() as cursor:
-                    # FETCH PHOTO PATH BEFORE DELETING THE ROW
-                    cursor.execute("SELECT photo_path FROM student WHERE Student_id=%s", (sid,))
-                    result = cursor.fetchone()
-                    
-                    # DELETE FROM DATABASE
                     cursor.execute("DELETE FROM student WHERE Student_id=%s", (sid,))
                     conn.commit()
-
-            # 4. FILE SYSTEM CLEANUP
-            # If a photo path exists and isn't the default image, delete it from the folder
-            if result and result[0]:
-                file_path = result[0]
-                if os.path.exists(file_path) and file_path != DEFAULT_PHOTO:
-                    try:
-                        os.remove(file_path)
-                    except Exception as e:
-                        print(f"File deletion error: {e}") # Non-critical error, just log it
-
-            messagebox.showinfo("Success", f"Record for Student {sid} has been deleted.")
+            messagebox.showinfo("Success", "Record deleted")
             self.clear_fields()
             self.load_data()
-
         except Exception as e:
-            messagebox.showerror("Database Error", f"Could not delete record: {e}")
+            messagebox.showerror("Error", f"Delete failed: {e}")
 
     # ================= SMART PAGINATION & SEARCH =================
     def load_data(self):

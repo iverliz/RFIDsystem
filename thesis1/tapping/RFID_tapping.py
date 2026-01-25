@@ -32,16 +32,7 @@ class SerialThread(QThread):
         self.baud = baud
         self.session_completed = False
 
-    def run(self):
-        try:
-            ser = serial.Serial(self.port, self.baud, timeout=1)
-            time.sleep(2)
-            while self.isRunning():
-                if ser.in_waiting:
-                    uid = ser.readline().decode(errors="ignore").strip()
-                    self.uid_scanned.emit(uid.split(":")[-1].strip())
-        except Exception as e:
-            print("Serial error:", e)
+   
 
 # ---------------- MAIN WINDOW ----------------
 class RFIDTapping(QMainWindow):
