@@ -2,7 +2,6 @@ import tkinter as tk
 from tkinter import messagebox, filedialog, ttk
 from PIL import ImageTk, Image
 import os
-import time
 import sys
 import io 
 
@@ -12,10 +11,6 @@ sys.path.append(BASE_DIR)
 
 from utils.database import db_connect
 
-
-# Define the path for your default placeholder image
-
-
 class TeacherRecord(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent, bg="#b2e5ed")
@@ -23,7 +18,7 @@ class TeacherRecord(tk.Frame):
 
         # ================= STATE VARIABLES =================
         self.photo_path = None  
-        self.photo = None # Keep reference to avoid garbage collection
+        self.photo = None 
         self.edit_mode = False
         self.current_teacher_id = None
 
@@ -56,7 +51,6 @@ class TeacherRecord(tk.Frame):
         self.upload_btn = tk.Button(self.left_box, text="Upload Photo", width=14, command=self.upload_photo)
         self.upload_btn.place(x=210, y=70)
 
-        # NEW: Remove Photo Button
         self.remove_btn = tk.Button(self.left_box, text="Remove Photo", width=14, fg="red", command=self.remove_photo_action)
         self.remove_btn.place(x=210, y=105)
 
@@ -105,6 +99,8 @@ class TeacherRecord(tk.Frame):
         self.search_var = tk.StringVar()
         tk.Entry(self.right_panel, textvariable=self.search_var, width=25, font=("Arial", 11)).place(x=20, y=50)
         tk.Button(self.right_panel, text="Search", command=self.search_teacher).place(x=260, y=47)
+        
+        # Link to clear_search for complete UI reset
         tk.Button(self.right_panel, text="Clear", command=self.clear_search).place(x=320, y=47)
 
         self.teacher_count_var = tk.StringVar(value="Total Teachers: 0 | Page 1/1")
@@ -128,16 +124,13 @@ class TeacherRecord(tk.Frame):
         tk.Button(nav, text="◀ Prev", command=self.prev_page).grid(row=0, column=0, padx=5)
         tk.Button(nav, text="Next ▶", command=self.next_page).grid(row=0, column=1, padx=5)
 
-        # Initial Load
         self.reset_ui_state()
         self.load_teachers()
 
     # ================= HELPERS & UI CONTROL =================
     def display_photo(self, data):
-        """Displays photo from BLOB data or shows placeholder."""
         try:
             if data:
-                # If data is bytes (from DB), use BytesIO. If it's a string (file path from upload), open directly.
                 if isinstance(data, bytes):
                     stream = io.BytesIO(data)
                     img = Image.open(stream).resize((160, 160))
@@ -152,8 +145,7 @@ class TeacherRecord(tk.Frame):
                                         font=("Arial", 10, "bold"), fg="#666666")
                 self.photo = None
         except Exception as e:
-            print(f"Photo display error: {e}")
-            self.photo_label.config(image="", text="Error Loading Image")
+            self.photo_label.config(image="", text="Error Image")
 
     def upload_photo(self):
         path = filedialog.askopenfilename(filetypes=[("Image Files", "*.jpg *.png *.jpeg")])
@@ -162,7 +154,6 @@ class TeacherRecord(tk.Frame):
             self.display_photo(path)
 
     def remove_photo_action(self):
-        """Clears the current photo selection and reverts to default (applied from Student Record)."""
         if self.add_btn["text"] == "SAVE" or self.edit_mode:
             if messagebox.askyesno("Confirm", "Remove photo from this record?"):
                 self.photo_path = None
@@ -214,7 +205,6 @@ class TeacherRecord(tk.Frame):
 
         try:
             binary_photo = None
-            # Convert the selected file path into Binary Data
             if self.photo_path and os.path.exists(self.photo_path):
                 img = Image.open(self.photo_path).convert("RGB")
                 img_byte_arr = io.BytesIO()
@@ -238,25 +228,17 @@ class TeacherRecord(tk.Frame):
         if error: return messagebox.showerror("Error", error)
 
         try:
-            binary_photo = None
             sql_parts = ["teacher_name=%s", "teacher_grade=%s"]
             params = [self.teacher_name_var.get().strip(), int(self.teacher_grade_var.get())]
 
-            # Logic for updating photo
             if self.photo_path is None:
-                # User clicked 'Remove Photo'
                 sql_parts.append("photo_path=NULL")
-            elif isinstance(self.photo_path, bytes):
-                # Photo wasn't changed (it's still the bytes we loaded from DB)
-                pass 
-            else:
-                # photo_path is a string (new file selected via upload button)
+            elif not isinstance(self.photo_path, bytes):
                 img = Image.open(self.photo_path).convert("RGB")
                 img_byte_arr = io.BytesIO()
                 img.save(img_byte_arr, format='JPEG')
-                binary_photo = img_byte_arr.getvalue()
                 sql_parts.append("photo_path=%s")
-                params.append(binary_photo)
+                params.append(img_byte_arr.getvalue())
 
             params.append(self.current_teacher_id)
             query = f"UPDATE teacher SET {', '.join(sql_parts)} WHERE teacher_id=%s"
@@ -273,7 +255,6 @@ class TeacherRecord(tk.Frame):
 
     def on_select(self, _):
         if self.edit_mode or self.add_btn["text"] == "SAVE": return
-        
         sel = self.teacher_table.focus()
         if not sel: return
         
@@ -285,20 +266,16 @@ class TeacherRecord(tk.Frame):
         try:
             with db_connect() as conn:
                 with conn.cursor() as cursor:
-                    # Fetch the BLOB data
                     cursor.execute("SELECT photo_path FROM teacher WHERE teacher_id=%s", (self.current_teacher_id,))
                     row = cursor.fetchone()
-                    # row[0] is now raw binary data, not a path string
                     self.photo_path = row[0] if row else None
                     self.display_photo(self.photo_path)
         except Exception as e:
-            print(f"Error loading teacher photo: {e}")
             self.display_photo(None)
 
     def enable_edit_mode(self):
         if not self.current_teacher_id:
-            return messagebox.showwarning("Warning", "Select a teacher from the table first")
-        
+            return messagebox.showwarning("Warning", "Select a teacher first")
         self.edit_mode = True
         self.set_fields_state("normal")
         self.add_btn.config(state="disabled")
@@ -306,23 +283,19 @@ class TeacherRecord(tk.Frame):
         self.update_btn.config(state="normal")
         self.edit_label.config(text="EDIT MODE", fg="white", bg="red")
 
-    
     def delete_teacher(self):
         if self.delete_btn["text"] == "CANCEL":
             self.reset_ui_state()
             return
-
         if not self.current_teacher_id: return messagebox.showwarning("Warning", "Select a teacher first")
-        if not messagebox.askyesno("Confirm", "Delete this teacher and their photo?"): return
+        if not messagebox.askyesno("Confirm", "Delete this teacher record?"): return
 
         try:
             with db_connect() as conn:
                 with conn.cursor() as cursor:
-                    cursor.execute("SELECT photo_path FROM teacher WHERE teacher_id=%s", (self.current_teacher_id,))
-                    p = cursor.fetchone()[0]
-                    if p and os.path.exists(p): os.remove(p)
                     cursor.execute("DELETE FROM teacher WHERE teacher_id=%s", (self.current_teacher_id,))
                     conn.commit()
+            messagebox.showinfo("Success", "Record deleted")
             self.reset_ui_state()
             self.load_teachers()
         except Exception as e:
@@ -355,6 +328,11 @@ class TeacherRecord(tk.Frame):
                 with conn.cursor() as cursor:
                     cursor.execute("SELECT teacher_id, teacher_name, teacher_grade FROM teacher WHERE teacher_name LIKE %s", (f"%{word}%",))
                     self.search_results = cursor.fetchall()
+            
+            if not self.search_results:
+                messagebox.showinfo("Search", f"No results found for '{word}'")
+                return self.clear_search()
+
             self.search_page = 1
             self.update_search_table()
         except Exception as e:
@@ -364,8 +342,7 @@ class TeacherRecord(tk.Frame):
         self.teacher_table.delete(*self.teacher_table.get_children())
         start = (self.search_page - 1) * self.page_size
         end = start + self.page_size
-        page_data = self.search_results[start:end]
-        for row in page_data: 
+        for row in self.search_results[start:end]: 
             self.teacher_table.insert("", "end", values=row)
         
         total_p = max(1, (len(self.search_results) + self.page_size - 1) // self.page_size)
@@ -376,6 +353,7 @@ class TeacherRecord(tk.Frame):
         self.search_results = []
         self.current_page = 1
         self.load_teachers()
+        self.reset_ui_state()
 
     def next_page(self):
         if self.search_var.get().strip():
@@ -394,5 +372,3 @@ class TeacherRecord(tk.Frame):
         elif self.current_page > 1:
             self.current_page -= 1
             self.load_teachers()
-
-    

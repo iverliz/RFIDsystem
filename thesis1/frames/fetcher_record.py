@@ -38,7 +38,6 @@ class FetcherRecord(tk.Frame):
                  font=("Arial", 20, "bold"), bg="#0047AB", fg="white").place(x=30, y=18)
 
         # ================= LEFT PANEL (FORM) =================
-        # Increased height to 520 to fit the new field
         self.left_box = tk.Frame(self, width=430, height=520, bg="white", bd=2, relief="groove")
         self.left_box.place(x=40, y=90)
         self.left_box.pack_propagate(False)
@@ -79,7 +78,6 @@ class FetcherRecord(tk.Frame):
             tk.Label(self.left_box, text=label, bg="white", font=("Arial", 11)).place(x=20, y=y_start + i * 40)
             ent = tk.Entry(self.left_box, textvariable=var, width=30, font=("Arial", 11))
             
-            # Make Fetcher Code readonly (System Generated)
             if label == "Fetcher Code:":
                 ent.config(state="readonly", readonlybackground="#f0f0f0")
                 
@@ -115,13 +113,14 @@ class FetcherRecord(tk.Frame):
         self.search_var = tk.StringVar()
         tk.Entry(self.right_panel, textvariable=self.search_var, width=30, font=("Arial", 11)).place(x=20, y=50)
         tk.Button(self.right_panel, text="Search", command=self.search_fetcher).place(x=280, y=47)
+        
+        # Link Clear button to clear_search for full UI reset
         tk.Button(self.right_panel, text="Clear", command=self.clear_search).place(x=340, y=47)
 
         self.fetcher_count_var = tk.StringVar(value="Total: 0 | Page 1/1")
         tk.Label(self.right_panel, textvariable=self.fetcher_count_var, font=("Arial", 11, "bold"),
                  fg="#0047AB", bg="white").place(x=20, y=85)
 
-        # Table with fetcher_code column
         columns = ("id", "fetcher_code", "Fetcher_name", "Address", "Contact")
         self.fetcher_table = ttk.Treeview(self.right_panel, columns=columns, show="headings", height=12)
         
@@ -182,7 +181,6 @@ class FetcherRecord(tk.Frame):
             messagebox.showwarning("Warning", "Enable Edit or Add mode first.")
 
     def set_fields_state(self, state):
-        # Index 0 is Fetcher Code, always keep it restricted
         for i, ent in enumerate(self.entries):
             if i == 0:
                 ent.config(state="readonly")
@@ -203,6 +201,7 @@ class FetcherRecord(tk.Frame):
         self.clear_fields()
 
     def clear_fields(self):
+        """Standard field clearing."""
         self.fetcher_code_var.set("")
         self.fetcher_name_var.set("")
         self.address_var.set("")
@@ -210,6 +209,7 @@ class FetcherRecord(tk.Frame):
         self.display_photo(None)
         self.photo_path = None
         self.fetcher_table.selection_remove(self.fetcher_table.selection())
+        self.current_fetcher_id = None
 
     # ================= DATA LOGIC =================
     def load_data(self):
@@ -231,19 +231,42 @@ class FetcherRecord(tk.Frame):
             print(f"Load error: {e}")
 
     def search_fetcher(self):
+        """Filters the table based on Name, Address, or Fetcher Code."""
         keyword = self.search_var.get().strip()
-        if not keyword: return self.clear_search()
+        
+        if not keyword:
+            self.clear_search()
+            return
+
         try:
             with db_connect() as conn:
                 with conn.cursor() as cursor:
-                    # Search across Name, Address, and the unique Fetcher Code
-                    query = "SELECT ID, fetcher_code, Fetcher_name, Address, contact FROM fetcher WHERE Fetcher_name LIKE %s OR Address LIKE %s OR fetcher_code LIKE %s"
+                    query = """SELECT ID, fetcher_code, Fetcher_name, Address, contact 
+                               FROM fetcher 
+                               WHERE Fetcher_name LIKE %s 
+                               OR Address LIKE %s 
+                               OR fetcher_code LIKE %s"""
                     cursor.execute(query, (f"%{keyword}%", f"%{keyword}%", f"%{keyword}%"))
                     self.search_results = cursor.fetchall()
+
             self.search_page = 1
             self.update_search_table()
+            
+            if not self.search_results:
+                messagebox.showinfo("Search", f"No records found for: {keyword}")
+                self.clear_search()
+
         except Exception as e:
             messagebox.showerror("Search Error", str(e))
+
+    def clear_search(self):
+        """Resets search and reloads data."""
+        self.search_var.set("")
+        self.search_results = []
+        self.current_page = 1
+        self.load_data()
+        self.clear_fields()
+        self.edit_label.config(text="VIEW MODE", fg="gray", bg="white")
 
     def update_search_table(self):
         self.fetcher_table.delete(*self.fetcher_table.get_children())
@@ -254,12 +277,6 @@ class FetcherRecord(tk.Frame):
         
         total_p = max(1, (len(self.search_results) + self.page_size - 1) // self.page_size)
         self.fetcher_count_var.set(f"Found: {len(self.search_results)} | Page {self.search_page}/{total_p}")
-
-    def clear_search(self):
-        self.search_var.set("")
-        self.search_results = []
-        self.current_page = 1
-        self.load_data()
 
     def next_page(self):
         if self.search_var.get().strip():
@@ -287,8 +304,6 @@ class FetcherRecord(tk.Frame):
             self.add_btn.config(text="SAVE", bg="#2E7D32")
             self.edit_btn.config(state="disabled")
             self.delete_btn.config(text="CANCEL", bg="#757575")
-            
-            # Auto-generate the next short code for preview
             self.fetcher_code_var.set(self.generate_short_code())
             return
 
@@ -296,9 +311,7 @@ class FetcherRecord(tk.Frame):
             return messagebox.showerror("Error", "Name and Address are required")
 
         try:
-            # Final check/generation of the code
             new_code = self.generate_short_code()
-
             binary_photo = None
             if self.photo_path:
                 img = Image.open(self.photo_path).convert("RGB")
@@ -340,7 +353,6 @@ class FetcherRecord(tk.Frame):
         sql_parts = ["Fetcher_name=%s", "Address=%s", "contact=%s"]
         params = [self.fetcher_name_var.get().strip(), self.address_var.get().strip(), self.contact_var.get().strip()]
 
-        # Photo logic for update
         if self.photo_path is None:
             sql_parts.append("photo_path=NULL")
         elif not isinstance(self.photo_path, bytes):
@@ -404,20 +416,12 @@ class FetcherRecord(tk.Frame):
             messagebox.showerror("Delete Error", str(e))
             
     def generate_short_code(self):
-        """Generates a sequential code like FC_0001, FC_0002, etc."""
         try:
             with db_connect() as conn:
                 with conn.cursor() as cursor:
-                    # Get the maximum ID currently in the table
                     cursor.execute("SELECT MAX(ID) FROM fetcher")
                     last_id = cursor.fetchone()[0]
-                    
-                    if last_id is None:
-                        next_number = 1
-                    else:
-                        next_number = last_id + 1
-                    
-                    # Formats to FC_ followed by 4 digits (padded with zeros)
+                    next_number = 1 if last_id is None else last_id + 1
                     return f"FC_{next_number:04d}"
         except Exception as e:
             print(f"Error generating code: {e}")

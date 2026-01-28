@@ -1,9 +1,8 @@
 import tkinter as tk
-from tkinter import messagebox, ttk, filedialog
-from datetime import datetime
+from tkinter import messagebox, ttk
+from datetime import datetime, timedelta
 import os
 import sys
-import csv
 
 # ================= PATH SETUP =================
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -11,156 +10,112 @@ sys.path.append(BASE_DIR)
 
 from utils.database import db_connect
 
-def mask_name(name):
-    """Mask full name except first letter of each part (e.g., J*** D*** C***)"""
-    if not name:
-        return ""
-    parts = name.split()
-    return " ".join(p[0] + "*" * (len(p) - 1) for p in parts)
-
 class RFIDHistory(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent, bg="#b2e5ed")
         self.controller = controller
 
-        # ================= HEADER & DASHBOARD =================
-        header = tk.Frame(self, bg="#0047AB", height=80)
+        # ================= HEADER =================
+        header = tk.Frame(self, bg="#0047AB", height=60)
         header.pack(fill="x")
-        
-        tk.Label(header, text="RFID LOG HISTORY", font=("Arial", 20, "bold"), 
-                 bg="#0047AB", fg="white").pack(side="left", padx=30, pady=20)
-        
-        self.stats_var = tk.StringVar(value="Today's Taps: 0")
-        tk.Label(header, textvariable=self.stats_var, font=("Arial", 12, "bold"), 
-                 bg="#0047AB", fg="#FFD700").pack(side="right", padx=30)
+        tk.Label(header, text="HISTORY FETCH & RECALL", font=("Arial", 18, "bold"), 
+                 bg="#0047AB", fg="white").pack(pady=10)
 
-        # ================= CONTROL PANEL (Filters) =================
-        control_frame = tk.Frame(self, bg="#b2e5ed", padx=20, pady=10)
-        control_frame.pack(fill="x")
+        # ================= SEARCH PANEL =================
+        search_frame = tk.Frame(self, bg="#b2e5ed", pady=10)
+        search_frame.pack(fill="x", padx=20)
 
-        tk.Label(control_frame, text="Search Name:", bg="#b2e5ed").pack(side="left")
+        tk.Label(search_frame, text="Student/Fetcher:", bg="#b2e5ed", font=("Arial", 10, "bold")).pack(side="left", padx=5)
         self.search_var = tk.StringVar()
-        tk.Entry(control_frame, textvariable=self.search_var, width=20).pack(side="left", padx=5)
+        tk.Entry(search_frame, textvariable=self.search_var, width=20).pack(side="left", padx=5)
 
-        tk.Label(control_frame, text="Date (YYYY-MM-DD):", bg="#b2e5ed").pack(side="left", padx=10)
+        tk.Label(search_frame, text="Date (YYYY-MM-DD):", bg="#b2e5ed", font=("Arial", 10, "bold")).pack(side="left", padx=5)
         self.date_var = tk.StringVar(value=datetime.now().strftime("%Y-%m-%d"))
-        tk.Entry(control_frame, textvariable=self.date_var, width=12).pack(side="left", padx=5)
+        tk.Entry(search_frame, textvariable=self.date_var, width=15).pack(side="left", padx=5)
 
-        tk.Button(control_frame, text="Refresh Data", command=self.load_history, 
-                  bg="#2196F3", fg="white").pack(side="left", padx=10)
+        tk.Button(search_frame, text="SEARCH", command=self.load_history_data, 
+                  bg="#2196F3", fg="white", font=("Arial", 9, "bold")).pack(side="left", padx=10)
         
-        tk.Button(control_frame, text="Export CSV", command=self.export_to_csv, 
-                  bg="#4CAF50", fg="white").pack(side="right", padx=10)
+        tk.Button(search_frame, text="RESET", command=self.reset_filters, 
+                  bg="#f44336", fg="white", font=("Arial", 9, "bold")).pack(side="left")
 
-        # ================= TABLE =================
-        columns = ("Fetcher", "Student", "Date", "Time", "Location", "Status")
-        
-        table_container = tk.Frame(self, bg="white", bd=1, relief="solid")
-        table_container.pack(expand=True, fill="both", padx=20, pady=10)
+        # ================= TABLE SETUP =================
+        table_frame = tk.Frame(self, bg="white", bd=1, relief="solid")
+        table_frame.pack(expand=True, fill="both", padx=20, pady=10)
 
-        self.table = ttk.Treeview(table_container, columns=columns, show="headings", selectmode="browse")
+        cols = ("ID", "Fetcher", "Student", "Grade", "Teacher", "Gate", "Date & Time")
+        self.table = ttk.Treeview(table_frame, columns=cols, show="headings")
         
-        # Configure Columns
-        column_widths = {"Fetcher": 180, "Student": 180, "Date": 100, "Time": 100, "Location": 120, "Status": 100}
-        for col in columns:
+        widths = {"ID": 50, "Fetcher": 140, "Student": 140, "Grade": 80, "Teacher": 140, "Gate": 80, "Date & Time": 160}
+        for col in cols:
             self.table.heading(col, text=col.upper())
-            self.table.column(col, anchor="center", width=column_widths.get(col, 150))
-
-        # Add Scrollbar
-        scrollbar = ttk.Scrollbar(table_container, orient="vertical", command=self.table.yview)
-        self.table.configure(yscrollcommand=scrollbar.set)
+            self.table.column(col, anchor="center", width=widths.get(col, 100))
         
         self.table.pack(side="left", expand=True, fill="both")
-        scrollbar.pack(side="right", fill="y")
+        
+        scroller = ttk.Scrollbar(table_frame, orient="vertical", command=self.table.yview)
+        self.table.configure(yscrollcommand=scroller.set)
+        scroller.pack(side="right", fill="y")
 
-        # Initial Load
-        self.load_history()
+        self.load_history_data()
+        self.auto_refresh()
 
-    # ================= DATABASE LOGIC =================
-    def load_history(self):
-        """Fetch and mask history from the attendance_logs table"""
+    def reset_filters(self):
+        self.search_var.set("")
+        self.date_var.set(datetime.now().strftime("%Y-%m-%d"))
+        self.load_history_data()
+
+    def load_history_data(self):
+        """Fetch history using DATETIME filters"""
         self.table.delete(*self.table.get_children())
-        search_query = self.search_var.get().strip()
-        date_query = self.date_var.get().strip()
+        name_filter = self.search_var.get().strip()
+        date_filter = self.date_var.get().strip()
 
         try:
             with db_connect() as conn:
                 with conn.cursor() as cur:
-                    # Query construction with optional search/date filters
-                    sql = """
-                        SELECT fetcher_name, student_name, log_date, log_time, location, status 
-                        FROM attendance_logs 
-                        WHERE log_date = %s
-                    """
-                    params = [date_query]
+                    # Select query looking for specific date and optional name
+                    sql = """SELECT id, fetcher_name, student_name, grade, teacher, location, time_out 
+                             FROM history_log 
+                             WHERE DATE(time_out) = %s"""
+                    params = [date_filter]
 
-                    if search_query:
-                        sql += " AND (fetcher_name LIKE %s OR student_name LIKE %s)"
-                        params.extend([f"%{search_query}%", f"%{search_query}%"])
+                    if name_filter:
+                        sql += " AND (student_name LIKE %s OR fetcher_name LIKE %s)"
+                        params.extend([f"%{name_filter}%", f"%{name_filter}%"])
 
-                    sql += " ORDER BY log_time DESC"
+                    sql += " ORDER BY time_out DESC"
                     
                     cur.execute(sql, tuple(params))
-                    rows = cur.fetchall()
-
-                    for row in rows:
-                        # Apply Privacy Masking
-                        masked_row = (
-                            mask_name(row[0]), # Fetcher
-                            mask_name(row[1]), # Student
-                            row[2],            # Date
-                            row[3],            # Time
-                            row[4],            # Location
-                            row[5]             # Status
-                        )
-                        self.table.insert("", "end", values=masked_row)
-
-                    self.stats_var.set(f"Taps on {date_query}: {len(rows)}")
-
+                    for row in cur.fetchall():
+                        # formatting row[6] (the datetime object) to string
+                        display_row = list(row)
+                        display_row[6] = row[6].strftime('%Y-%m-%d %I:%M %p')
+                        self.table.insert("", "end", values=display_row)
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to load history: {e}")
+            print(f"Error loading history: {e}")
 
-    # ================= UTILITY FUNCTIONS =================
-    def export_to_csv(self):
-        """Export the CURRENTLY VIEWED table data to a CSV file"""
-        if not self.table.get_children():
-            messagebox.showwarning("Export", "No data available to export.")
-            return
-
-        file_path = filedialog.asksaveasfilename(
-            defaultextension=".csv",
-            filetypes=[("CSV files", "*.csv")],
-            initialfile=f"RFID_Log_{self.date_var.get()}.csv"
-        )
-
-        if file_path:
-            try:
-                with open(file_path, mode='w', newline='') as file:
-                    writer = csv.writer(file)
-                    writer.writerow(["Fetcher", "Student", "Date", "Time", "Location", "Status"])
-                    for row_id in self.table.get_children():
-                        writer.writerow(self.table.item(row_id)["values"])
-                messagebox.showinfo("Success", f"Data exported to {os.path.basename(file_path)}")
-            except Exception as e:
-                messagebox.showerror("Export Error", str(e))
-
-    def manual_rfid_tap(self, fetcher, student, location, status="Verified"):
-        """Function to be called by the RFID scanner listener to log a tap"""
-        now = datetime.now()
-        log_date = now.strftime("%Y-%m-%d")
-        log_time = now.strftime("%I:%M:%S %p")
-
+    def save_log(self, f_name, s_name, s_id, grade, teacher, gate):
+        """Adds log and deletes records older than 1 week using SQL INTERVAL"""
         try:
             with db_connect() as conn:
                 with conn.cursor() as cur:
-                    cur.execute("""
-                        INSERT INTO attendance_logs (fetcher_name, student_name, log_date, log_time, location, status)
-                        VALUES (%s, %s, %s, %s, %s, %s)
-                    """, (fetcher, student, log_date, log_time, location, status))
+                    # 1. INSERT NEW RECORD (NOW() handles the current time)
+                    cur.execute("""INSERT INTO history_log 
+                                    (fetcher_name, student_name, student_id, grade, teacher, location, time_out) 
+                                    VALUES (%s, %s, %s, %s, %s, %s, NOW())""", 
+                                    (f_name, s_name, s_id, grade, teacher, gate))
+
+                    # 2. AUTOMATIC CLEANUP (Delete records older than 7 days)
+                    cur.execute("DELETE FROM history_log WHERE time_out < NOW() - INTERVAL 7 DAY")
+
                     conn.commit()
-            
-            # If current view is today, refresh the table
-            if self.date_var.get() == log_date:
-                self.load_history()
+            self.load_history_data()
         except Exception as e:
-            print(f"Log Error: {e}")
+            messagebox.showerror("Database Error", f"Could not save: {e}")
+
+    def auto_refresh(self):
+        """Auto-refresh every 10 seconds if user isn't searching"""
+        if not self.search_var.get() and self.winfo_viewable():
+            self.load_history_data()
+        self.after(10000, self.auto_refresh)
