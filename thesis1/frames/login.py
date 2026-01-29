@@ -4,14 +4,11 @@ from PIL import ImageTk, Image
 import os
 import sys
 import bcrypt
-import secrets
 import re
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
 from utils.database import db_connect
-
-SESSION_FILE = "session.txt"
 
 # ================= HELPER FUNCTIONS =================
 def add_hover_effect(button, hover_bg, default_bg):
@@ -57,7 +54,6 @@ class LoginFrame(tk.Frame):
                      fg="red", bg="#E0E0E0", font=("Arial", 9)).pack(expand=True)
         
     def login_panel(self):
-        # Increased panel height for better vertical spacing
         panel = tk.Frame(self, width=420, height=550, bg="white", bd=0, highlightthickness=1, highlightbackground="#DDDDDD")
         panel.place(relx=0.78, rely=0.5, anchor="center")
         panel.pack_propagate(False)
@@ -65,7 +61,6 @@ class LoginFrame(tk.Frame):
         tk.Label(panel, text="Welcome Back!", font=("Helvetica", 24, "bold"),
                  bg="white", fg="#0047AB").pack(pady=(40, 30))
 
-        # Container for inputs to manage padding easily
         input_container = tk.Frame(panel, bg="white")
         input_container.pack(fill="x", padx=40)
 
@@ -130,12 +125,12 @@ class LoginFrame(tk.Frame):
             elif not bcrypt.checkpw(pw.encode(), stored_pw.encode()):
                 messagebox.showerror("Error", "Password is incorrect")
             else:
-                token = secrets.token_hex(16)
-                with open(SESSION_FILE, "w") as f:
-                    f.write(token)
+                # Store user details in a dictionary for the in-memory session
+                user_data = {"username": user, "employee_id": emp_id}
                 messagebox.showinfo("Success", "Login Successful")
-                self.failed_attempts = 0
-                self.controller.show_frame("MainDashboard")
+                
+                # Pass user_data to the controller to 'log in'
+                self.controller.login_success(user_data)
         else:
             messagebox.showerror("Error", "Username not found")
 
@@ -176,7 +171,6 @@ class SignUpFrame(tk.Frame):
                      fg="red", bg="#E0E0E0", font=("Arial", 9)).pack(expand=True)
 
     def signup_panel(self):
-        # Improved panel dimensions for better scrolling feel
         panel = tk.Frame(self, width=420, height=620, bg="white", bd=0, highlightthickness=1, highlightbackground="#DDDDDD")
         panel.place(relx=0.78, rely=0.5, anchor="center")
         panel.pack_propagate(False)
@@ -192,7 +186,6 @@ class SignUpFrame(tk.Frame):
         self.password = self.entry(form_container, "Password", hide=True)
         self.confirm = self.entry(form_container, "Confirm Password", hide=True)
 
-        # Requirements Checklist with improved alignment
         req_frame = tk.Frame(form_container, bg="white")
         req_frame.pack(fill="x", pady=10)
         
@@ -203,7 +196,6 @@ class SignUpFrame(tk.Frame):
             "special": tk.Label(req_frame, text="• Special character", fg="red", bg="white", font=("Arial", 8))
         }
 
-        # Grid requirements for a 2x2 look
         self.pw_reqs["length"].grid(row=0, column=0, sticky="w", padx=5)
         self.pw_reqs["upper"].grid(row=0, column=1, sticky="w", padx=5)
         self.pw_reqs["digit"].grid(row=1, column=0, sticky="w", padx=5)
@@ -211,7 +203,6 @@ class SignUpFrame(tk.Frame):
 
         self.password.bind("<KeyRelease>", self.validate_password)
 
-        # Buttons
         btn_signup = tk.Button(panel, text="CREATE ACCOUNT", bg="#00A86B", fg="white", cursor="hand2",
                         font=("Arial", 12, "bold"), bd=0, command=self.signup)
         btn_signup.pack(fill="x", padx=40, pady=(15, 10), ipady=10)
@@ -227,9 +218,6 @@ class SignUpFrame(tk.Frame):
         e = tk.Entry(panel, font=("Arial", 12), bg="#F8F9FA", bd=0, highlightthickness=1, highlightbackground="#CCCCCC", show="*" if hide else "")
         e.pack(fill="x", ipady=6, pady=(2, 10))
         return e
-
-    def toggle_password(self, entry_widget):
-        entry_widget.config(show="" if entry_widget["show"] == "*" else "*")
 
     def validate_password(self, event=None):
         pw = self.password.get()
@@ -259,6 +247,7 @@ class SignUpFrame(tk.Frame):
                     if cur.fetchone():
                         messagebox.showerror("Error", "Employee ID exists")
                         return
+                    # FIXED SQL Syntax below: added parentheses around values placeholders
                     cur.execute("INSERT INTO users (username, password, employee_id) VALUES (%s, %s, %s)",
                                 (user, hashed, emp_id))
                     conn.commit()

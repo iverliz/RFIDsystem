@@ -115,7 +115,7 @@ class RFIDHistory(tk.Frame):
             messagebox.showerror("Database Error", f"Could not save: {e}")
 
     def auto_refresh(self):
-        """Auto-refresh every 10 seconds if user isn't searching"""
+        
         if not self.search_var.get() and self.winfo_viewable():
             self.load_history_data()
         self.after(10000, self.auto_refresh)

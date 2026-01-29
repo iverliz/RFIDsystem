@@ -109,7 +109,7 @@ class FetcherRecord(tk.Frame):
         self.right_panel.place(x=500, y=90)
         self.right_panel.pack_propagate(False)
 
-        tk.Label(self.right_panel, text="Search (Name/Address/Code)", font=("Arial", 12, "bold"), bg="white").place(x=20, y=15)
+        tk.Label(self.right_panel, text="Search FETCHER (Name/Address/Code)", font=("Arial", 12, "bold"), bg="white").place(x=20, y=15)
         self.search_var = tk.StringVar()
         tk.Entry(self.right_panel, textvariable=self.search_var, width=30, font=("Arial", 11)).place(x=20, y=50)
         tk.Button(self.right_panel, text="Search", command=self.search_fetcher).place(x=280, y=47)
@@ -231,7 +231,6 @@ class FetcherRecord(tk.Frame):
             print(f"Load error: {e}")
 
     def search_fetcher(self):
-        """Filters the table based on Name, Address, or Fetcher Code."""
         keyword = self.search_var.get().strip()
         
         if not keyword:
@@ -253,9 +252,13 @@ class FetcherRecord(tk.Frame):
             self.update_search_table()
             
             if not self.search_results:
-                messagebox.showinfo("Search", f"No records found for: {keyword}")
+                messagebox.showinfo("Search", f"No results found for: {keyword}")
                 self.clear_search()
-
+                return
+            
+            else :
+                messagebox.showinfo("Search", f"Found {len(self.search_results)} results for: {keyword}")
+                
         except Exception as e:
             messagebox.showerror("Search Error", str(e))
 

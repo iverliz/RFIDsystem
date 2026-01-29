@@ -94,7 +94,7 @@ class TeacherRecord(tk.Frame):
         self.right_panel.place(x=520, y=90)
         self.right_panel.pack_propagate(False)
 
-        tk.Label(self.right_panel, text="Search Teacher", font=("Arial", 14, "bold"), bg="white").place(x=20, y=15)
+        tk.Label(self.right_panel, text="Search Teacher (NAME/GRADE)", font=("Arial", 14, "bold"), bg="white").place(x=20, y=15)
 
         self.search_var = tk.StringVar()
         tk.Entry(self.right_panel, textvariable=self.search_var, width=25, font=("Arial", 11)).place(x=20, y=50)
@@ -103,7 +103,7 @@ class TeacherRecord(tk.Frame):
         # Link to clear_search for complete UI reset
         tk.Button(self.right_panel, text="Clear", command=self.clear_search).place(x=320, y=47)
 
-        self.teacher_count_var = tk.StringVar(value="Total Teachers: 0 | Page 1/1")
+        self.teacher_count_var = tk.StringVar(value="Total Records: 0 | Page 1/1")
         tk.Label(self.right_panel, textvariable=self.teacher_count_var, font=("Arial", 11, "bold"), fg="#0047AB", bg="white").place(x=20, y=85)
 
         # Table
@@ -320,18 +320,21 @@ class TeacherRecord(tk.Frame):
             print(f"Load error: {e}")
 
     def search_teacher(self):
-        word = self.search_var.get().strip()
-        if not word: return self.clear_search()
+        keyword = self.search_var.get().strip()
+        if not keyword: return self.clear_search()
         
         try:
             with db_connect() as conn:
                 with conn.cursor() as cursor:
-                    cursor.execute("SELECT teacher_id, teacher_name, teacher_grade FROM teacher WHERE teacher_name LIKE %s", (f"%{word}%",))
+                    cursor.execute("SELECT teacher_id, teacher_name, teacher_grade FROM teacher WHERE teacher_name LIKE %s", (f"%{keyword}%",))
                     self.search_results = cursor.fetchall()
             
             if not self.search_results:
-                messagebox.showinfo("Search", f"No results found for '{word}'")
+                messagebox.showinfo("Search", f"No results found for '{keyword}'")
                 return self.clear_search()
+            
+            else :
+                messagebox.showinfo("Search", f"Found {len(self.search_results)} results for: {keyword}")
 
             self.search_page = 1
             self.update_search_table()

@@ -1,5 +1,6 @@
 import tkinter as tk
-import os
+from tkinter import messagebox  # Added for logout notification
+# import os  <-- You can remove this now
 
 from frames.history_log import RFIDHistory
 from frames.report import Report
@@ -8,8 +9,6 @@ from frames.teacher_record import TeacherRecord
 from frames.student_record import StudentRecord
 from frames.fetcher_record import FetcherRecord
 from frames.rfid_registration import RfidRegistration
-
-SESSION_FILE = "session.txt"
 
 # Reusable hover effect
 def add_hover_effect(widget, hover_bg, default_bg):
@@ -51,7 +50,6 @@ class MainDashboard(tk.Frame):
         # ================= MAIN AREA =================
         self.main_area = tk.Frame(self, bg="#e0f7fa")
         self.main_area.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        
 
         # ================= TOP BAR =================
         self.topbar = tk.Frame(self.main_area, height=50, bg="#26c6da", bd=2, relief="groove")
@@ -83,12 +81,12 @@ class MainDashboard(tk.Frame):
         # ================= OPEN DEFAULT FRAME =================
         self.open_frame(StudentRecord)
 
-    # ================= OPEN FRAME =================
     def open_frame(self, frame_class):
         try:
             if self.current_frame:
                 self.current_frame.destroy()
 
+            # Pass self.controller so sub-frames can access the main app
             self.current_frame = frame_class(self.main_area, self.controller)
             self.current_frame.pack(fill="both", expand=True)
 
@@ -96,9 +94,8 @@ class MainDashboard(tk.Frame):
             for btn, cls in self.menu_buttons.items():
                 btn.config(bg="#00838f" if cls == frame_class else "#00acc1")
         except Exception as e:
-            tk.messagebox.showerror("Error", f"Failed to open {frame_class.__name__}:\n{e}")
+            messagebox.showerror("Error", f"Failed to open {frame_class.__name__}:\n{e}")
 
-    # ================= CREATE MENU BUTTON =================
     def create_menu_button(self, text, frame_class):
         btn = tk.Button(
             self.sidebar,
@@ -113,27 +110,16 @@ class MainDashboard(tk.Frame):
             command=lambda: self.open_frame(frame_class)
         )
         btn.pack(fill="x", pady=2)
-
         add_hover_effect(btn, "#00838f", "#00acc1")
         self.menu_buttons[btn] = frame_class
-
-    # ================= LOGOUT FUNCTION =================
-    def logout(self):
-        # Remove session file securely
-        try:
-            if os.path.exists(SESSION_FILE):
-                os.remove(SESSION_FILE)
-        except:
-            pass
-
-        # Reset all sensitive data in frames
-        for frame in self.controller.frames.values():
-            for attr in ["username", "password"]:
-                if hasattr(frame, attr):
-                    widget = getattr(frame, attr)
-                    if isinstance(widget, tk.Entry):
-                        widget.delete(0, tk.END)
-
-        self.controller.show_frame("LoginFrame")
-        tk.messagebox.showinfo("Logout", "You are now logged out.")
         
+    
+
+    # ================= UPDATED LOGOUT FUNCTION =================
+    def logout(self):
+        # 1. Clear the variable in the main app
+        # This is the "In-Memory" logout. It sets current_user to None.
+        self.controller.logout()
+        
+        # 2. Inform the user
+        messagebox.showinfo("Logout", "You have been logged out.")
