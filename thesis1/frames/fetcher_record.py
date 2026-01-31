@@ -3,9 +3,7 @@ from tkinter import messagebox, filedialog, ttk
 from PIL import ImageTk, Image
 import os
 import sys
-import time
 import io 
-import uuid # For unique ID generation
 
 # ================= PATH SETUP =================
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

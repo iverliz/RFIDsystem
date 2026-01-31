@@ -93,7 +93,8 @@ class Account(tk.Frame):
         try:
             with db_connect() as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT id, employee_id, username, created_at, 'Administrator' FROM users ORDER BY id DESC")
+                # CHANGED: Replaced 'Administrator' string with the actual 'role' column
+                cursor.execute("SELECT id, employee_id, username, created_at, role FROM users ORDER BY id DESC")
                 for row in cursor.fetchall():
                     self.account_table.insert("", "end", values=row)
         except Exception as e:
@@ -109,7 +110,8 @@ class Account(tk.Frame):
         try:
             with db_connect() as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT id, employee_id, username, created_at, 'Administrator' FROM users WHERE username LIKE %s", (f"%{query}%",))
+                # CHANGED: Replaced 'Administrator' string with the actual 'role' column
+                cursor.execute("SELECT id, employee_id, username, created_at, role FROM users WHERE username LIKE %s", (f"%{query}%",))
                 for row in cursor.fetchall():
                     self.account_table.insert("", "end", values=row)
         except Exception as e:

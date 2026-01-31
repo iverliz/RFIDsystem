@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, ttk
 from PIL import ImageTk, Image
 import os
 import sys
@@ -73,13 +73,13 @@ class LoginFrame(tk.Frame):
         self.employee_id.pack(fill="x", ipady=8, pady=(5, 15))
 
         tk.Label(input_container, text="Password", bg="white", font=("Arial", 10, "bold")).pack(anchor="w")
-        pass_frame = tk.Frame(input_container, bg="white")
+        pass_frame = tk.Frame(input_container, bg="#F8F9FA", highlightthickness=1, highlightbackground="#CCCCCC")
         pass_frame.pack(fill="x", pady=(5, 0))
         
-        self.password = tk.Entry(pass_frame, font=("Arial", 12), bg="#F8F9FA", bd=0, highlightthickness=1, highlightbackground="#CCCCCC", show="*")
-        self.password.pack(side=tk.LEFT, fill="x", expand=True, ipady=8)
+        self.password = tk.Entry(pass_frame, font=("Arial", 12), bg="#F8F9FA", bd=0, show="*")
+        self.password.pack(side=tk.LEFT, fill="x", expand=True, ipady=8, padx=5)
 
-        toggle_button = tk.Button(pass_frame, text="👁️", bg="white", bd=0, cursor="hand2",
+        toggle_button = tk.Button(pass_frame, text="👁️", bg="#F8F9FA", bd=0, cursor="hand2",
                                   command=self.password_visibility)
         toggle_button.pack(side=tk.RIGHT, padx=5)
 
@@ -92,7 +92,7 @@ class LoginFrame(tk.Frame):
         footer_frame.pack(fill="x", padx=40)
 
         su = tk.Button(footer_frame, text="Create Account", font=("Arial", 9), bg="white", fg="#00A86B",
-                       bd=0, cursor="hand2", command=lambda: self.controller.show_frame("SignUpFrame"))
+                        bd=0, cursor="hand2", command=lambda: self.controller.show_frame("SignUpFrame"))
         su.pack(side=tk.LEFT)
         
         forgot_btn = tk.Button(footer_frame, text="Forgot Password?", fg="#666666", bg="white",
@@ -112,30 +112,27 @@ class LoginFrame(tk.Frame):
         try:
             with db_connect() as conn:
                 with conn.cursor() as cur:
-                    cur.execute("SELECT password, employee_id FROM users WHERE username=%s", (user,))
+                    cur.execute("SELECT password, employee_id, role FROM users WHERE username=%s", (user,))
                     result = cur.fetchone()
         except Exception as e:
             messagebox.showerror("Error", f"Database error: {e}")
             return
 
         if result:
-            stored_pw, stored_emp_id = result
+            stored_pw, stored_emp_id, role = result
             if emp_id != str(stored_emp_id):
                 messagebox.showerror("Error", "Employee ID is incorrect")
             elif not bcrypt.checkpw(pw.encode(), stored_pw.encode()):
                 messagebox.showerror("Error", "Password is incorrect")
             else:
-                # Store user details in a dictionary for the in-memory session
-                user_data = {"username": user, "employee_id": emp_id}
-                messagebox.showinfo("Success", "Login Successful")
-                
-                # Pass user_data to the controller to 'log in'
+                user_data = {"username": user, "employee_id": emp_id, "role": role}
+                messagebox.showinfo("Success", f"Login Successful! Welcome {role}")
                 self.controller.login_success(user_data)
         else:
             messagebox.showerror("Error", "Username not found")
 
     def password_visibility(self):
-        if self.password["show"] == "*":
+        if self.password.cget("show") == "*":
             self.password.config(show="")
         else:
             self.password.config(show="*")
@@ -171,23 +168,52 @@ class SignUpFrame(tk.Frame):
                      fg="red", bg="#E0E0E0", font=("Arial", 9)).pack(expand=True)
 
     def signup_panel(self):
-        panel = tk.Frame(self, width=420, height=620, bg="white", bd=0, highlightthickness=1, highlightbackground="#DDDDDD")
+        panel = tk.Frame(self, width=420, height=650, bg="white", bd=0, highlightthickness=1, highlightbackground="#DDDDDD")
         panel.place(relx=0.78, rely=0.5, anchor="center")
         panel.pack_propagate(False)
 
         tk.Label(panel, text="Join Us", font=("Helvetica", 24, "bold"),
-                 bg="white", fg="#0047AB").pack(pady=(30, 20))
+                 bg="white", fg="#0047AB").pack(pady=(20, 10))
 
         form_container = tk.Frame(panel, bg="white")
         form_container.pack(fill="x", padx=40)
 
         self.username = self.entry(form_container, "Username")
         self.employee_id = self.entry(form_container, "Employee ID")
-        self.password = self.entry(form_container, "Password", hide=True)
-        self.confirm = self.entry(form_container, "Confirm Password", hide=True)
+        
+        # --- Password Field ---
+        tk.Label(form_container, text="Password", bg="white", font=("Arial", 9, "bold")).pack(anchor="w")
+        pass_frame = tk.Frame(form_container, bg="#F8F9FA", highlightthickness=1, highlightbackground="#CCCCCC")
+        pass_frame.pack(fill="x", pady=(2, 10))
+
+        self.password = tk.Entry(pass_frame, font=("Arial", 12), bg="#F8F9FA", bd=0, show="*")
+        self.password.pack(side=tk.LEFT, expand=True, fill="x", ipady=6, padx=5)
+
+        self.toggle_pass = tk.Button(pass_frame, text="👁️", bg="#F8F9FA", bd=0, cursor="hand2",
+                             command=lambda: self.toggle_visibility(self.password))
+        self.toggle_pass.pack(side=tk.RIGHT, padx=5)
+
+        # --- Confirm Password Field ---
+        tk.Label(form_container, text="Confirm Password", bg="white", font=("Arial", 9, "bold")).pack(anchor="w")
+        conf_frame = tk.Frame(form_container, bg="#F8F9FA", highlightthickness=1, highlightbackground="#CCCCCC")
+        conf_frame.pack(fill="x", pady=(2, 10))
+
+        self.confirm = tk.Entry(conf_frame, font=("Arial", 12), bg="#F8F9FA", bd=0, show="*")
+        self.confirm.pack(side=tk.LEFT, expand=True, fill="x", ipady=6, padx=5)
+
+        self.toggle_conf = tk.Button(conf_frame, text="👁️", bg="#F8F9FA", bd=0, cursor="hand2",
+                             command=lambda: self.toggle_visibility(self.confirm))
+        self.toggle_conf.pack(side=tk.RIGHT, padx=5)
+                           
+        # ROLE SELECTION DROPDOWN
+        tk.Label(form_container, text="Account Role", bg="white", font=("Arial", 9, "bold")).pack(anchor="w")
+        self.role_var = tk.StringVar(value="Teacher")
+        self.role_dropdown = ttk.Combobox(form_container, textvariable=self.role_var, state="readonly", font=("Arial", 11))
+        self.role_dropdown['values'] = ("Teacher", "Admin")
+        self.role_dropdown.pack(fill="x", pady=(2, 10))
 
         req_frame = tk.Frame(form_container, bg="white")
-        req_frame.pack(fill="x", pady=10)
+        req_frame.pack(fill="x", pady=5)
         
         self.pw_reqs = {
             "length": tk.Label(req_frame, text="• 8+ characters", fg="red", bg="white", font=("Arial", 8)),
@@ -219,6 +245,12 @@ class SignUpFrame(tk.Frame):
         e.pack(fill="x", ipady=6, pady=(2, 10))
         return e
 
+    def toggle_visibility(self, entry_widget):
+        if entry_widget.cget("show") == "*":
+            entry_widget.config(show="")
+        else:
+            entry_widget.config(show="*")
+
     def validate_password(self, event=None):
         pw = self.password.get()
         self.pw_reqs["length"].config(fg="green" if len(pw) >= 8 else "red")
@@ -227,7 +259,11 @@ class SignUpFrame(tk.Frame):
         self.pw_reqs["special"].config(fg="green" if re.search(r'[\W_]', pw) else "red")
 
     def signup(self):
-        user, emp_id, pw, cpw = self.username.get().strip(), self.employee_id.get().strip(), self.password.get(), self.confirm.get()
+        user, emp_id, pw, cpw, role = (self.username.get().strip(), 
+                                       self.employee_id.get().strip(), 
+                                       self.password.get(), 
+                                       self.confirm.get(),
+                                       self.role_var.get())
 
         if not user or not pw or not emp_id:
             messagebox.showerror("Error", "All fields required")
@@ -247,11 +283,10 @@ class SignUpFrame(tk.Frame):
                     if cur.fetchone():
                         messagebox.showerror("Error", "Employee ID exists")
                         return
-                    # FIXED SQL Syntax below: added parentheses around values placeholders
-                    cur.execute("INSERT INTO users (username, password, employee_id) VALUES (%s, %s, %s)",
-                                (user, hashed, emp_id))
+                    cur.execute("INSERT INTO users (username, password, employee_id, role) VALUES (%s, %s, %s, %s)",
+                                (user, hashed, emp_id, role))
                     conn.commit()
-            messagebox.showinfo("Success", "Account created")
+            messagebox.showinfo("Success", f"Account created as {role}")
             self.controller.show_frame("LoginFrame")
         except Exception as e:
             messagebox.showerror("Error", f"Database error: {e}")
@@ -318,5 +353,5 @@ class ForgotPasswordFrame(tk.Frame):
                         self.controller.show_frame("LoginFrame")
                     else:
                         messagebox.showerror("Error", "User details do not match.")
-        except Exception as e:
+        except Exception as e: 
             messagebox.showerror("Error", f"Database error: {e}")
