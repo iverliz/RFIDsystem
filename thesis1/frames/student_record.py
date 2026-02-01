@@ -87,7 +87,7 @@ class StudentRecord(tk.Frame):
             tk.Label(self.left_box, text=label, bg="white", font=("Arial", 11)).place(x=20, y=y_start + i * 40)
 
             if label == "Grade:":
-                entry = ttk.Spinbox(self.left_box, from_=1, to=12, textvariable=var, width=28, state="readonly")
+                entry = ttk.Spinbox(self.left_box, from_=1, to=6, textvariable=var, width=28, state="readonly")
             elif label == "Student ID:":
                 entry = tk.Entry(self.left_box, textvariable=var, width=30, font=("Arial", 11),
                                  validate="key", validatecommand=(self.num_validate, "%P"))
@@ -285,29 +285,53 @@ class StudentRecord(tk.Frame):
             self.display_photo(self.photo_path)
 
     def add_student(self):
+    # Transition to 'Adding' state
         if self.add_btn["text"] == "ADD":
-            self.reset_ui_state(); self.set_fields_state("normal"); self.student_id_entry.config(state="normal")
-            self.add_btn.config(text="SAVE", bg="#2E7D32"); self.edit_btn.config(state="disabled")
-            self.delete_btn.config(text="CANCEL", bg="#757575"); return
-
-        error = self.validate()
-        if error: return messagebox.showerror("Error", error)
+            self.clear_fields() # Clear any previous selection
+            self.set_fields_state("normal")
+            self.student_id_entry.config(state="normal")
         
-        sid = self.student_id_var.get()
-        if self.student_id_exists(sid): return messagebox.showerror("Error", "ID Exists")
+        # UI Feedback
+            self.add_btn.config(text="SAVE", bg="#2E7D32")
+            self.edit_btn.config(state="disabled")
+            self.delete_btn.config(text="CANCEL", bg="#757575")
+            self.edit_label.config(text="ADD MODE", fg="white", bg="#4CAF50")
+            return
 
+    # Logical Validation and Saving
+        error = self.validate()
+        if error: 
+            return messagebox.showerror("Validation Error", error)
+    
+        sid = self.student_id_var.get()
+        if self.student_id_exists(sid): 
+            return messagebox.showerror("Error", f"Student ID {sid} already exists.")
+
+    # Photo Processing
         binary_photo = None
         if self.photo_path and isinstance(self.photo_path, str):
             img = Image.open(self.photo_path).convert("RGB")
-            buf = io.BytesIO(); img.save(buf, format='JPEG')
+            buf = io.BytesIO()
+            img.save(buf, format='JPEG')
             binary_photo = buf.getvalue()
 
-        with db_connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute("INSERT INTO student (Student_name, Student_id, grade_lvl, Guardian_name, Guardian_contact, Teacher_name, photo_path) VALUES (%s,%s,%s,%s,%s,%s,%s)",
-                            (self.student_name_var.get(), sid, self.grade_var.get(), self.guardian_name_var.get(), self.guardian_contact_var.get(), self.teacher_name_var.get(), binary_photo))
-                conn.commit()
-        self.reset_ui_state(); self.load_data()
+    # Database Execution
+        try:
+            with db_connect() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                    INSERT INTO student 
+                    (Student_name, Student_id, grade_lvl, Guardian_name, Guardian_contact, Teacher_name, photo_path) 
+                    VALUES (%s,%s,%s,%s,%s,%s,%s)""",
+                    (self.student_name_var.get(), sid, self.grade_var.get(), 
+                     self.guardian_name_var.get(), self.guardian_contact_var.get(), 
+                     self.teacher_name_var.get(), binary_photo))
+                    conn.commit()
+            messagebox.showinfo("Success", "Student record added successfully!")
+            self.reset_ui_state()
+            self.load_data()
+        except Exception as e:
+            messagebox.showerror("Database Error", f"Could not save: {str(e)}")
 
     def enable_edit_mode(self):
         if not self.student_id_var.get(): return messagebox.showwarning("Warning", "Select a student")
@@ -343,8 +367,22 @@ class StudentRecord(tk.Frame):
             self.reset_ui_state(); self.load_data()
 
     def validate(self):
-        if not self.student_name_var.get().strip(): return "Name Required"
-        if not self.student_id_var.get().isdigit(): return "ID must be numeric"
+        name = self.student_name_var.get().strip()
+        sid = self.student_id_var.get().strip()
+        grade = self.grade_var.get().strip()
+
+        if not name: 
+            return " Name is required."
+        if not sid.isdigit(): 
+            return "Student ID must be numeric."
+    
+    # Strictly enforce Grade 6 limit
+        try:
+            if not grade or int(grade) > 6 or int(grade) < 1:
+                return "Grade must be between 1 and 6."
+        except ValueError:
+            return "Invalid Grade format."
+
         return None
 
     def student_id_exists(self, sid):

@@ -52,14 +52,12 @@ class MainDashboard(tk.Frame):
             self.create_menu_button("Teacher Record", TeacherRecord)
             self.create_menu_button("Fetcher Record", FetcherRecord)
             self.create_menu_button("RFID Registration", RfidRegistration)
-            self.create_menu_button("Classroom Record", ClassroomFrame)
             self.create_menu_button("History Log", RFIDHistory)
             self.create_menu_button("Reports", Report)
             self.create_menu_button("Account Settings", Account)
         else:
             # Teacher Role Restriction
             self.create_menu_button("My Classroom", ClassroomFrame)
-            self.create_menu_button("Account Settings", Account)
 
         # ================= MAIN AREA =================
         self.main_area = tk.Frame(self, bg="#e0f7fa")

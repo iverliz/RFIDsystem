@@ -26,6 +26,8 @@ class ClassroomFrame(tk.Frame):
         
         # 2. Sync Teacher Name from DB
         self.real_teacher_name = self.get_teacher_display_name()
+        self.last_log_id = None  # To track the latest seen log
+        self.check_for_updates() # Start the background loop
 
         # ================= HEADER =================
         header = tk.Frame(self, bg="#0047AB", height=80)
@@ -220,6 +222,36 @@ class ClassroomFrame(tk.Frame):
             wraplength=250
         )
         self.info_label.pack(pady=20, padx=15, fill="x")
+        
+        tk.Label(
+        self.right_col, 
+        text="📌 RECENT FETCH LOGS", 
+        font=("Arial", 10, "bold"), 
+        bg="white", 
+        fg="#0047AB"
+    ).pack(pady=(20, 5))
+
+        history_frame = tk.Frame(self.right_col, bg="white")
+        history_frame.pack(fill="both", expand=True, padx=5, pady=5)
+
+    # Columns based on your history_log table
+        cols = ("Time", "Fetcher", "Location")
+        self.history_table = ttk.Treeview(history_frame, columns=cols, show="headings", height=8)
+    
+        self.history_table.heading("Time", text="TIME OUT")
+        self.history_table.heading("Fetcher", text="PICKED UP BY")
+        self.history_table.heading("Location", text="GATE/LOC")
+
+        self.history_table.column("Time", width=120, anchor="center")
+        self.history_table.column("Fetcher", width=100, anchor="w")
+        self.history_table.column("Location", width=70, anchor="center")
+    
+        self.history_table.pack(side="left", fill="both", expand=True)
+
+    # Add Scrollbar
+        h_scroll = ttk.Scrollbar(history_frame, orient="vertical", command=self.history_table.yview)
+        self.history_table.configure(yscrollcommand=h_scroll.set)
+        h_scroll.pack(side="right", fill="y")
 
     # ================= LOGIC =================
 
@@ -313,29 +345,74 @@ class ClassroomFrame(tk.Frame):
         try:
             with db_connect() as conn:
                 with conn.cursor() as cur:
+                # 1. Get Student Profile (Existing Code)
                     cur.execute("""
-                        SELECT Student_name, Student_id,
-                               Guardian_name, Guardian_contact, photo_path
-                        FROM student WHERE Student_id = %s
-                    """, (student_id,))
+                    SELECT Student_name, Student_id, Guardian_name, Guardian_contact, photo_path 
+                    FROM student WHERE Student_id = %s
+                """ , (student_id,))
                     res = cur.fetchone()
+                
+                    if res:
+                        name, sid, guard, contact, photo_blob = res
+                        self.info_label.config(text=f"NAME: {name}\nID: {sid}\nGUARDIAN: {guard}\nCONTACT: {contact}")
+                    # ... (Handle photo_blob as you did before) ...
 
-                    if not res:
-                        return
-
-                    name, sid, guard, contact, photo_blob = res
-                    self.info_label.config(
-                        text=f"NAME: {name}\nID: {sid}\nGUARDIAN: {guard}\nCONTACT: {contact}"
-                    )
-
-                    if photo_blob:
-                        img = Image.open(io.BytesIO(photo_blob))
-                        img = img.resize((180, 180), Image.Resampling.LANCZOS)
-                        photo = ImageTk.PhotoImage(img)
-                        self.photo_label.config(image=photo, text="")
-                        self.photo_label.image = photo
-                    else:
-                        self.photo_label.config(image="", text="No Photo")
+                # 2. Get Logs from history_log table
+                    self.history_table.delete(*self.history_table.get_children())
+                
+                # Query matching your table: history_log
+                    cur.execute("""
+                    SELECT time_out, fetcher_name, location 
+                    FROM history_log 
+                    WHERE student_id = %s 
+                    ORDER BY time_out DESC 
+                    LIMIT 15
+                """, (student_id,))
+                
+                    for log in cur.fetchall():
+                    # Format: YYYY-MM-DD HH:MM
+                        timestamp = log[0].strftime("%m/%d %I:%M %p") if log[0] else "N/A"
+                        fetcher = log[1]
+                        loc = log[2]
+                    
+                        self.history_table.insert("", "end", values=(timestamp, fetcher, loc))
 
         except Exception as e:
-            print("Detail Error:", e)
+            print(f"Error loading history_log: {e}")
+            
+    def check_for_updates(self):
+        try:
+            with db_connect() as conn:
+                with conn.cursor() as cur:
+                # Check for the latest log ID belonging to this teacher's students
+                    cur.execute("""
+                    SELECT id, student_name, time_out 
+                    FROM history_log 
+                    WHERE teacher = %s 
+                    ORDER BY id DESC LIMIT 1
+                """, (self.real_teacher_name,))
+                
+                    new_log = cur.fetchone()
+
+                    if new_log:
+                        log_id, s_name, t_out = new_log
+                    
+                    # If this ID is higher than our last recorded ID, a new fetch happened!
+                        if self.last_log_id is not None and log_id > self.last_log_id:
+                            self.notify_teacher(s_name, t_out)
+                            self.refresh_tables() # Automatically refresh the student list
+                    
+                        self.last_log_id = log_id
+        except Exception as e:
+            print("Update Check Error:", e)
+
+    # Repeat this function every 5000ms (5 seconds)
+        self.after(5000, self.check_for_updates)
+
+    def notify_teacher(self, student_name, time_out):
+    
+    # Option 1: A non-blocking popup (Toast)
+        messagebox.showinfo("Student Fetched", f"🔔 {student_name} has just been picked up!\nTime: {time_out}")
+    
+    # Option 2: Flash the header or change a status label (less intrusive)
+    # self.name_display.config(text=f"LATEST: {student_name} PICKED UP", fg="orange")

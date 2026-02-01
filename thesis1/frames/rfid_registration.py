@@ -111,6 +111,10 @@ class RfidRegistration(tk.Frame):
         self.delete_btn = tk.Button(btn_row, text="DELETE", bg="#F44336", fg="white", 
                                    font=("Arial", 10, "bold"), width=15, command=self.delete_record)
         self.delete_btn.pack(side="left", padx=5)
+        
+        self.status_btn = tk.Button(btn_row, text="TOGGLE STATUS", bg="#607D8B", fg="white", 
+                            font=("Arial", 10, "bold"), width=15, command=self.toggle_status)
+        self.status_btn.pack(side="left", padx=5)
 
         # ================= BOTTOM SECTION: SEARCH & TABLE =================
         table_main_container = tk.Frame(self, bg="white", bd=1, relief="solid")
@@ -131,15 +135,19 @@ class RfidRegistration(tk.Frame):
                  fg="#2E7D32", bg="#f0f0f0").pack(side="right", padx=10)
 
         # Treeview
-        cols = ("id", "f_name", "s_name", "f_rfid", "s_rfid")
+        cols = ("id", "f_name", "s_name", "f_rfid", "s_rfid" , "status")
         self.table = ttk.Treeview(table_main_container, columns=cols, show="headings", height=10)
         self.table.heading("id", text="ID")
         self.table.heading("f_name", text="Fetcher")
         self.table.heading("s_name", text="Student")
         self.table.heading("f_rfid", text="F-RFID")
         self.table.heading("s_rfid", text="S-RFID")
+        self.table.heading("status", text="Status")
+        self.table.column("status", width=80, anchor="center")
         for col in cols: self.table.column(col, anchor="center")
         self.table.column("id", width=50)
+        self.table.tag_configure("Active", foreground="green")
+        self.table.tag_configure("Inactive", foreground="red")
         self.table.pack(fill="both", expand=True)
         self.table.bind("<<TreeviewSelect>>", self.on_row_select)
 
@@ -223,14 +231,10 @@ class RfidRegistration(tk.Frame):
 
     # ================= DATABASE SYNC LOGIC =================
     def save_record(self):
-        """
-        Saves to 'registrations' and pushes the RFID tags 
-        back to 'student' and 'fetcher' tables for global sync.
-        """
-        f_rfid = self.rfid_var.get().strip()
-        s_rfid = self.student_rfid_var.get().strip()
-        f_code = self.fetcher_code_var.get().strip()
-        s_id = self.student_id_var.get().strip()
+        f_rfid = str(self.rfid_var.get()).strip()
+        s_rfid = str(self.student_rfid_var.get()).strip()
+        f_code = str(self.fetcher_code_var.get()).strip()
+        s_id = str(self.student_id_var.get()).strip()
 
         if not all([f_rfid, s_rfid, f_code, s_id]):
             return messagebox.showerror("Missing Info", "Ensure both RFIDs are scanned and IDs are entered.")
@@ -243,8 +247,9 @@ class RfidRegistration(tk.Frame):
                         sql = """UPDATE registrations SET 
                                  rfid=%s, fetcher_name=%s, fetcher_code=%s, student_id=%s, 
                                  student_name=%s, grade=%s, teacher=%s, address=%s, 
-                                 contact=%s, paired_rfid=%s, student_rfid=%s 
+                                 contact=%s, paired_rfid=%s, student_rfid=%s
                                  WHERE registration_id=%s"""
+                        
                         cur.execute(sql, (f_rfid, self.fetcher_name_var.get(), f_code, s_id,
                                           self.student_name_var.get(), self.grade_var.get(),
                                           self.teacher_var.get(), self.fetcher_address_var.get(),
@@ -252,23 +257,27 @@ class RfidRegistration(tk.Frame):
                                           self.selected_registration_id))
                     else:
                         sql = """INSERT INTO registrations (rfid, fetcher_name, fetcher_code, student_id, 
-                                 student_name, grade, teacher, address, contact, paired_rfid, student_rfid) 
-                                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"""
+                                 student_name, grade, teacher, address, contact, paired_rfid, student_rfid, status) 
+                                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, 'Active')"""
+                        
                         cur.execute(sql, (f_rfid, self.fetcher_name_var.get(), f_code, s_id,
                                           self.student_name_var.get(), self.grade_var.get(),
                                           self.teacher_var.get(), self.fetcher_address_var.get(),
                                           self.fetcher_contact_var.get(), s_rfid, s_rfid))
 
-                    # 2. CROSS-TABLE SYNC: Push RFIDs to individual master tables
-                    cur.execute("UPDATE student SET rfid_tag=%s WHERE Student_id=%s", (s_rfid, s_id))
-                    cur.execute("UPDATE fetcher SET rfid_tag=%s WHERE fetcher_code=%s", (f_rfid, f_code))
+                    # 2. CROSS-TABLE SYNC (THE FIX IS HERE)
+                    # Note: Ensure these column names (rfid_tag) exist in your student/fetcher tables
+                    # If you get an error here, check if the column is named 'rfid_tag' or 'student_rfid'
+                    cur.execute("UPDATE student SET student_rfid=%s WHERE Student_id=%s", (s_rfid, s_id))
+                    cur.execute("UPDATE fetcher SET rfid=%s WHERE fetcher_code=%s", (f_rfid, f_code))
                     
                     conn.commit()
             
             messagebox.showinfo("Success", "Pairing complete and Master Records Updated!")
             self.reset_load()
+            
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to sync records: {e}")
+            messagebox.showerror("Sync Error", f"Database error: {e}")
             
     def autofill_record(self, record_type="student", *args):
         if record_type == "student":
@@ -356,8 +365,14 @@ class RfidRegistration(tk.Frame):
             with conn.cursor() as cur:
                 cur.execute("SELECT COUNT(*) FROM registrations")
                 self.total_records = cur.fetchone()[0]
-                cur.execute("SELECT registration_id, fetcher_name, student_name, rfid, student_rfid FROM registrations ORDER BY registration_id DESC LIMIT %s OFFSET %s", (self.page_size, offset))
-                for row in cur.fetchall(): self.table.insert("", "end", values=row)
+            # Added status to the SELECT query
+                cur.execute("""SELECT registration_id, fetcher_name, student_name, rfid, student_rfid, status 
+                           FROM registrations ORDER BY registration_id DESC LIMIT %s OFFSET %s""", (self.page_size, offset))
+            
+                for row in cur.fetchall():
+                # Apply the tag based on the status string (row[5])
+                    self.table.insert("", "end", values=row, tags=(row[5],)) 
+                
         total_p = max(1, (self.total_records + self.page_size - 1) // self.page_size)
         self.page_lbl.config(text=f"Page {self.current_page} of {total_p}")
 
@@ -412,10 +427,17 @@ class RfidRegistration(tk.Frame):
     def search_records(self):
         q = f"%{self.search_var.get()}%"
         self.table.delete(*self.table.get_children())
-        with db_connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT registration_id, fetcher_name, student_name, rfid, student_rfid FROM registrations WHERE fetcher_name LIKE %s OR student_name LIKE %s", (q, q))
-                for row in cur.fetchall(): self.table.insert("", "end", values=row)
+        try:
+            with db_connect() as conn:
+                with conn.cursor() as cur:
+                    # Added 'status' to match the table's expected columns
+                    cur.execute("""SELECT registration_id, fetcher_name, student_name, rfid, student_rfid, status 
+                                   FROM registrations 
+                                   WHERE fetcher_name LIKE %s OR student_name LIKE %s""", (q, q))
+                    for row in cur.fetchall():
+                        self.table.insert("", "end", values=row, tags=(row[5],))
+        except Exception as e:
+            print(f"Search Error: {e}")
 
     def next_page(self):
         if self.current_page * self.page_size < self.total_records: self.current_page += 1; self.load_data()
@@ -452,3 +474,29 @@ class RfidRegistration(tk.Frame):
                 print("Serial port released.")
             except Exception as e:
                 print(f"Error closing serial: {e}")
+                
+    def toggle_status(self):
+        if not self.selected_registration_id:
+            return messagebox.showwarning("Warning", "Please select a record from the table first.")
+
+    # Get current status from table
+        selection = self.table.focus()
+        current_values = self.table.item(selection, "values")
+        current_status = current_values[5] # index 5 is the status column
+
+        new_status = "Inactive" if current_status == "Active" else "Active"
+        confirm_msg = f"Mark ID as {new_status}?"
+    
+        if messagebox.askyesno("Confirm Status Change", confirm_msg):
+            try:
+                with db_connect() as conn:
+                    with conn.cursor() as cur:
+                    # Update database
+                        cur.execute("UPDATE registrations SET status=%s WHERE registration_id=%s", 
+                                (new_status, self.selected_registration_id))
+                        conn.commit()
+            
+                messagebox.showinfo("Updated", f"Record is now {new_status}")
+                self.load_data() # Refresh table
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to update status: {e}")
