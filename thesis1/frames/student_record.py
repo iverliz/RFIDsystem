@@ -59,8 +59,7 @@ class StudentRecord(tk.Frame):
         self.student_id_var = tk.StringVar()
         self.guardian_name_var = tk.StringVar()
         self.guardian_contact_var = tk.StringVar()
-        self.teacher_name_var = tk.StringVar()
-        self.fetcher_code_var = tk.StringVar() 
+        
         
         self.guardian_contact_var.trace_add("write", self.format_contact)
 
@@ -78,7 +77,7 @@ class StudentRecord(tk.Frame):
             ("Student ID:", self.student_id_var),
             ("Guardian Name:", self.guardian_name_var),
             ("Guardian Contact:", self.guardian_contact_var),
-            ("Teacher Name:", self.teacher_name_var),
+
         ]
 
         self.entries = {}
@@ -206,7 +205,7 @@ class StudentRecord(tk.Frame):
 
     def clear_fields(self):
         for var in (self.student_name_var, self.student_id_var, self.grade_var,
-                    self.guardian_name_var, self.guardian_contact_var, self.teacher_name_var):
+                    self.guardian_name_var, self.guardian_contact_var,):
             var.set("")
         self.display_photo(None)
         self.photo_path = None
@@ -280,7 +279,6 @@ class StudentRecord(tk.Frame):
             self.grade_var.set(student["grade_lvl"])
             self.guardian_name_var.set(student["Guardian_name"])
             self.guardian_contact_var.set(student["Guardian_contact"])
-            self.teacher_name_var.set(student["Teacher_name"])
             self.photo_path = student["photo_path"]
             self.display_photo(self.photo_path)
 
@@ -321,11 +319,11 @@ class StudentRecord(tk.Frame):
                 with conn.cursor() as cur:
                     cur.execute("""
                     INSERT INTO student 
-                    (Student_name, Student_id, grade_lvl, Guardian_name, Guardian_contact, Teacher_name, photo_path) 
-                    VALUES (%s,%s,%s,%s,%s,%s,%s)""",
+                    (Student_name, Student_id, grade_lvl, Guardian_name, Guardian_contact, photo_path) 
+                    VALUES (%s,%s,%s,%s,%s,%s)""",
                     (self.student_name_var.get(), sid, self.grade_var.get(), 
                      self.guardian_name_var.get(), self.guardian_contact_var.get(), 
-                     self.teacher_name_var.get(), binary_photo))
+                     binary_photo))
                     conn.commit()
             messagebox.showinfo("Success", "Student record added successfully!")
             self.reset_ui_state()
@@ -351,8 +349,8 @@ class StudentRecord(tk.Frame):
 
         with db_connect() as conn:
             with conn.cursor() as cur:
-                cur.execute("UPDATE student SET Student_name=%s, grade_lvl=%s, Guardian_name=%s, Guardian_contact=%s, Teacher_name=%s, Student_id=%s, photo_path=%s WHERE Student_id=%s",
-                            (self.student_name_var.get(), self.grade_var.get(), self.guardian_name_var.get(), self.guardian_contact_var.get(), self.teacher_name_var.get(), self.student_id_var.get(), binary_photo, self.original_student_id))
+                cur.execute("UPDATE student SET Student_name=%s, grade_lvl=%s, Guardian_name=%s, Guardian_contact=%s,, Student_id=%s, photo_path=%s WHERE Student_id=%s",
+                            (self.student_name_var.get(), self.grade_var.get(), self.guardian_name_var.get(), self.guardian_contact_var.get(), self.student_id_var.get(), binary_photo, self.original_student_id))
                 conn.commit()
         self.reset_ui_state(); self.load_data()
 

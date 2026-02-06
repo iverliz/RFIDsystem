@@ -10,7 +10,6 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
 from utils.database import db_connect
 
-
 class ClassroomFrame(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent, bg="#F0F4F8")
@@ -26,8 +25,11 @@ class ClassroomFrame(tk.Frame):
         
         # 2. Sync Teacher Name from DB
         self.real_teacher_name = self.get_teacher_display_name()
-        self.last_log_id = None  # To track the latest seen log
-        self.check_for_updates() # Start the background loop
+        self.last_log_id = None  
+        self.current_photo = None # Keep reference to avoid garbage collection
+        
+        # Start background loop
+        self.check_for_updates() 
 
         # ================= HEADER =================
         header = tk.Frame(self, bg="#0047AB", height=80)
@@ -78,9 +80,8 @@ class ClassroomFrame(tk.Frame):
         self.setup_profile_panel()
         self.setup_tables(left_col)
 
-        # Bind AFTER table exists
+        # Bind event
         self.student_table.bind("<<TreeviewSelect>>", self.on_student_select)
-
         self.refresh_tables()
 
     # ================= DATABASE =================
@@ -99,7 +100,7 @@ class ClassroomFrame(tk.Frame):
             print("Teacher Lookup Error:", e)
             return self.username
 
-    # ================= TABLE SETUP =================
+    # ================= TABLE & UI SETUP =================
 
     def setup_tables(self, parent):
         action_panel = tk.Frame(
@@ -110,145 +111,80 @@ class ClassroomFrame(tk.Frame):
         )
         action_panel.pack(fill="x", pady=(0, 15), ipady=10)
 
-        tk.Label(
-            action_panel,
-            text="STUDENT ID:",
-            font=("Arial", 10, "bold"),
-            bg="white"
-        ).grid(row=0, column=0, padx=10, pady=5)
-
+        # Row 0: Student ID Input
+        tk.Label(action_panel, text="STUDENT ID:", font=("Arial", 10, "bold"), bg="white").grid(row=0, column=0, padx=10, pady=5, sticky="e")
+        
         self.search_id_var = tk.StringVar()
         self.search_id_var.trace_add("write", self.verify_student_id)
+        self.id_entry = tk.Entry(action_panel, textvariable=self.search_id_var, width=15, font=("Arial", 11))
+        self.id_entry.grid(row=0, column=1, padx=5, sticky="w")
 
-        self.id_entry = tk.Entry(
-            action_panel,
-            textvariable=self.search_id_var,
-            width=20,
-            font=("Arial", 11)
-        )
-        self.id_entry.grid(row=0, column=1, padx=5)
-
-        tk.Label(
-            action_panel,
-            text="CONFIRM NAME:",
-            font=("Arial", 10, "bold"),
-            bg="white"
-        ).grid(row=1, column=0, padx=10, pady=5)
-
+        # Row 1: Name Verification
+        tk.Label(action_panel, text="CONFIRM NAME:", font=("Arial", 10, "bold"), bg="white").grid(row=1, column=0, padx=10, pady=5, sticky="e")
+        
         self.found_name_var = tk.StringVar(value="Enter ID...")
-        self.name_display = tk.Label(
-            action_panel,
-            textvariable=self.found_name_var,
-            font=("Arial", 11, "italic"),
-            bg="white",
-            fg="#0047AB"
-        )
+        self.name_display = tk.Label(action_panel, textvariable=self.found_name_var, font=("Arial", 11, "italic"), bg="white", fg="#0047AB")
         self.name_display.grid(row=1, column=1, sticky="w")
 
-        self.add_btn = tk.Button(
-            action_panel,
-            text="ADD TO CLASS",
-            bg="#4CAF50",
-            fg="white",
-            font=("Arial", 9, "bold"),
-            padx=15,
-            state="disabled",
-            command=self.add_student_to_class
-        )
-        self.add_btn.grid(row=0, column=2, rowspan=2, padx=20)
+        # Column 2: Control Buttons
+        btn_frame = tk.Frame(action_panel, bg="white")
+        btn_frame.grid(row=0, column=2, rowspan=2, padx=20)
 
-        tk.Label(
-            parent,
-            text="My Enrolled Students",
-            font=("Arial", 12, "bold"),
-            bg="#F0F4F8",
-            fg="#0047AB"
-        ).pack(anchor="w")
+        self.add_btn = tk.Button(
+            btn_frame, text="ADD TO CLASS", bg="#4CAF50", fg="white", 
+            font=("Arial", 9, "bold"), width=16, state="disabled", command=self.add_student_to_class
+        )
+        self.add_btn.pack(pady=2)
+
+        self.remove_btn = tk.Button(
+            btn_frame, text="REMOVE FROM CLASS", bg="#F44336", fg="white", 
+            font=("Arial", 9, "bold"), width=16, state="disabled", command=self.remove_student_from_class
+        )
+        self.remove_btn.pack(pady=2)
+
+        tk.Label(parent, text="My Enrolled Students", font=("Arial", 12, "bold"), bg="#F0F4F8", fg="#0047AB").pack(anchor="w")
 
         self.columns = ("ID", "Student ID", "Full Name", "Fetcher Code")
         self.student_table = self.create_table(parent, self.columns)
 
     def create_table(self, parent, cols):
         frame = tk.Frame(parent)
-        frame.pack(fill="both", expand=True, pady=(5, 15))  # ✅ FIX
-
+        frame.pack(fill="both", expand=True, pady=(5, 15))
         tree = ttk.Treeview(frame, columns=cols, show="headings", height=12)
-
         for c in cols:
             tree.heading(c, text=c.upper())
-            if c == "Full Name":
-                tree.column(c, width=200, anchor="w")
-            elif c == "ID":
-                tree.column(c, width=50, anchor="center")
-            else:
-                tree.column(c, width=150, anchor="center")
-
+            tree.column(c, width=100, anchor="center")
+        tree.column("Full Name", width=200, anchor="w")
         tree.pack(side="left", fill="both", expand=True)
-
         sb = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
         tree.configure(yscrollcommand=sb.set)
         sb.pack(side="right", fill="y")
-
         return tree
 
-    # ================= PROFILE =================
-
     def setup_profile_panel(self):
-        tk.Label(
-            self.right_col,
-            text="STUDENT PROFILE",
-            font=("Arial", 11, "bold"),
-            bg="white",
-            fg="#0047AB"
-        ).pack(pady=15)
+        tk.Label(self.right_col, text="STUDENT PROFILE", font=("Arial", 11, "bold"), bg="white", fg="#0047AB").pack(pady=15)
 
-        self.photo_label = tk.Label(
-            self.right_col,
-            text="No Image",
-            bg="#E1E8EE",
-            width=25,
-            height=10,
-            relief="solid",
-            bd=1
-        )
+        self.photo_label = tk.Label(self.right_col, text="No Image", bg="#E1E8EE", width=25, height=10, relief="solid", bd=1)
         self.photo_label.pack(pady=10, padx=20)
 
-        self.info_label = tk.Label(
-            self.right_col,
-            text="Select a student...",
-            bg="white",
-            justify="left",
-            font=("Arial", 10),
-            wraplength=250
-        )
+        self.info_label = tk.Label(self.right_col, text="Select a student...", bg="white", justify="left", font=("Arial", 10), wraplength=250)
         self.info_label.pack(pady=20, padx=15, fill="x")
         
-        tk.Label(
-        self.right_col, 
-        text="📌 RECENT FETCH LOGS", 
-        font=("Arial", 10, "bold"), 
-        bg="white", 
-        fg="#0047AB"
-    ).pack(pady=(20, 5))
+        tk.Label(self.right_col, text="📌 RECENT FETCH LOGS", font=("Arial", 10, "bold"), bg="white", fg="#0047AB").pack(pady=(10, 5))
 
         history_frame = tk.Frame(self.right_col, bg="white")
         history_frame.pack(fill="both", expand=True, padx=5, pady=5)
 
-    # Columns based on your history_log table
-        cols = ("Time", "Fetcher", "Location")
+        cols = ("Time", "Fetcher", "Loc")
         self.history_table = ttk.Treeview(history_frame, columns=cols, show="headings", height=8)
-    
-        self.history_table.heading("Time", text="TIME OUT")
-        self.history_table.heading("Fetcher", text="PICKED UP BY")
-        self.history_table.heading("Location", text="GATE/LOC")
-
-        self.history_table.column("Time", width=120, anchor="center")
-        self.history_table.column("Fetcher", width=100, anchor="w")
-        self.history_table.column("Location", width=70, anchor="center")
-    
+        self.history_table.heading("Time", text="TIME")
+        self.history_table.heading("Fetcher", text="BY")
+        self.history_table.heading("Loc", text="LOC")
+        self.history_table.column("Time", width=100, anchor="center")
+        self.history_table.column("Fetcher", width=80, anchor="w")
+        self.history_table.column("Loc", width=40, anchor="center")
         self.history_table.pack(side="left", fill="both", expand=True)
-
-    # Add Scrollbar
+        
         h_scroll = ttk.Scrollbar(history_frame, orient="vertical", command=self.history_table.yview)
         self.history_table.configure(yscrollcommand=h_scroll.set)
         h_scroll.pack(side="right", fill="y")
@@ -265,12 +201,8 @@ class ClassroomFrame(tk.Frame):
         try:
             with db_connect() as conn:
                 with conn.cursor() as cur:
-                    cur.execute(
-                        "SELECT Student_name FROM student WHERE Student_id = %s",
-                        (sid,)
-                    )
+                    cur.execute("SELECT Student_name FROM student WHERE Student_id = %s", (sid,))
                     res = cur.fetchone()
-
                     if res:
                         self.found_name_var.set(res[0])
                         self.name_display.config(fg="green")
@@ -285,40 +217,46 @@ class ClassroomFrame(tk.Frame):
     def add_student_to_class(self):
         sid = self.search_id_var.get().strip()
         sname = self.found_name_var.get()
-
-        if not messagebox.askyesno("Confirm", f"Add {sname} to your class?"):
-            return
+        if not messagebox.askyesno("Confirm", f"Add {sname} to your class?"): return
 
         try:
             with db_connect() as conn:
                 with conn.cursor() as cur:
-                    cur.execute(
-                        "SELECT teacher_name FROM classroom WHERE student_id = %s",
-                        (sid,)
-                    )
+                    cur.execute("SELECT teacher_name FROM classroom WHERE student_id = %s", (sid,))
                     if cur.fetchone():
-                        messagebox.showerror(
-                            "Already Assigned",
-                            f"{sname} is already assigned to another teacher."
-                        )
+                        messagebox.showerror("Error", "Student already assigned to a teacher.")
                         return
-
-                    cur.execute(
-                        "INSERT INTO classroom (teacher_name, student_id) VALUES (%s, %s)",
-                        (self.real_teacher_name, sid)
-                    )
+                    cur.execute("INSERT INTO classroom (teacher_name, student_id) VALUES (%s, %s)", (self.real_teacher_name, sid))
                     conn.commit()
-
             self.search_id_var.set("")
             self.refresh_tables()
-            messagebox.showinfo("Success", f"{sname} added to class.")
-
+            messagebox.showinfo("Success", f"{sname} added.")
         except Exception as e:
             messagebox.showerror("Database Error", str(e))
 
+    def remove_student_from_class(self):
+        sel = self.student_table.focus()
+        if not sel: return
+        data = self.student_table.item(sel, "values")
+        sid, sname = data[1], data[2]
+
+        if not messagebox.askyesno("Remove", f"Remove {sname} from your class?"): return
+
+        try:
+            with db_connect() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("DELETE FROM classroom WHERE student_id = %s AND teacher_name = %s", (sid, self.real_teacher_name))
+                    conn.commit()
+            self.refresh_tables()
+            self.info_label.config(text="Select a student...")
+            self.photo_label.config(image='', text="No Image")
+            messagebox.showinfo("Success", "Student removed.")
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
     def refresh_tables(self):
         self.student_table.delete(*self.student_table.get_children())
-
+        self.remove_btn.config(state="disabled")
         try:
             with db_connect() as conn:
                 with conn.cursor() as cur:
@@ -328,91 +266,64 @@ class ClassroomFrame(tk.Frame):
                         INNER JOIN classroom c ON s.Student_id = c.student_id
                         WHERE c.teacher_name = %s
                     """, (self.real_teacher_name,))
-
                     for row in cur.fetchall():
                         self.student_table.insert("", "end", values=row)
         except Exception as e:
-            print("Fetch Error:", e)
+            print("Refresh Error:", e)
 
     def on_student_select(self, event):
         sel = self.student_table.focus()
-        if not sel:
-            return
+        if not sel: return
         data = self.student_table.item(sel, "values")
+        self.remove_btn.config(state="normal")
         self.load_full_student_details(data[1])
 
     def load_full_student_details(self, student_id):
         try:
             with db_connect() as conn:
                 with conn.cursor() as cur:
-                # 1. Get Student Profile (Existing Code)
-                    cur.execute("""
-                    SELECT Student_name, Student_id, Guardian_name, Guardian_contact, photo_path 
-                    FROM student WHERE Student_id = %s
-                """ , (student_id,))
+                    cur.execute("SELECT Student_name, Student_id, Guardian_name, Guardian_contact, photo_path FROM student WHERE Student_id = %s", (student_id,))
                     res = cur.fetchone()
-                
                     if res:
                         name, sid, guard, contact, photo_blob = res
                         self.info_label.config(text=f"NAME: {name}\nID: {sid}\nGUARDIAN: {guard}\nCONTACT: {contact}")
-                    # ... (Handle photo_blob as you did before) ...
+                        
+                        # Fix Image Display
+                        if photo_blob:
+                            try:
+                                stream = io.BytesIO(photo_blob)
+                                img = Image.open(stream)
+                                img = img.resize((180, 150), Image.Resampling.LANCZOS)
+                                self.current_photo = ImageTk.PhotoImage(img)
+                                self.photo_label.config(image=self.current_photo, text="")
+                            except:
+                                self.photo_label.config(image='', text="Image Error")
+                        else:
+                            self.photo_label.config(image='', text="No Photo")
 
-                # 2. Get Logs from history_log table
+                    # Load Logs
                     self.history_table.delete(*self.history_table.get_children())
-                
-                # Query matching your table: history_log
-                    cur.execute("""
-                    SELECT time_out, fetcher_name, location 
-                    FROM history_log 
-                    WHERE student_id = %s 
-                    ORDER BY time_out DESC 
-                    LIMIT 15
-                """, (student_id,))
-                
+                    cur.execute("SELECT time_out, fetcher_name, location FROM history_log WHERE student_id = %s ORDER BY time_out DESC LIMIT 10", (student_id,))
                     for log in cur.fetchall():
-                    # Format: YYYY-MM-DD HH:MM
-                        timestamp = log[0].strftime("%m/%d %I:%M %p") if log[0] else "N/A"
-                        fetcher = log[1]
-                        loc = log[2]
-                    
-                        self.history_table.insert("", "end", values=(timestamp, fetcher, loc))
-
+                        ts = log[0].strftime("%m/%d %I:%M%p") if log[0] else "N/A"
+                        self.history_table.insert("", "end", values=(ts, log[1], log[2]))
         except Exception as e:
-            print(f"Error loading history_log: {e}")
-            
+            print("Load Details Error:", e)
+
     def check_for_updates(self):
         try:
             with db_connect() as conn:
                 with conn.cursor() as cur:
-                # Check for the latest log ID belonging to this teacher's students
-                    cur.execute("""
-                    SELECT id, student_name, time_out 
-                    FROM history_log 
-                    WHERE teacher = %s 
-                    ORDER BY id DESC LIMIT 1
-                """, (self.real_teacher_name,))
-                
+                    cur.execute("SELECT id, student_name, time_out FROM history_log WHERE teacher = %s ORDER BY id DESC LIMIT 1", (self.real_teacher_name,))
                     new_log = cur.fetchone()
-
                     if new_log:
                         log_id, s_name, t_out = new_log
-                    
-                    # If this ID is higher than our last recorded ID, a new fetch happened!
                         if self.last_log_id is not None and log_id > self.last_log_id:
                             self.notify_teacher(s_name, t_out)
-                            self.refresh_tables() # Automatically refresh the student list
-                    
+                            self.refresh_tables()
                         self.last_log_id = log_id
-        except Exception as e:
-            print("Update Check Error:", e)
-
-    # Repeat this function every 5000ms (5 seconds)
+        except: pass
         self.after(5000, self.check_for_updates)
 
     def notify_teacher(self, student_name, time_out):
-    
-    # Option 1: A non-blocking popup (Toast)
-        messagebox.showinfo("Student Fetched", f"🔔 {student_name} has just been picked up!\nTime: {time_out}")
-    
-    # Option 2: Flash the header or change a status label (less intrusive)
-    # self.name_display.config(text=f"LATEST: {student_name} PICKED UP", fg="orange")
+        messagebox.showinfo("Student Fetched", f"🔔 {student_name} picked up!\nTime: {time_out}")

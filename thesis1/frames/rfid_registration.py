@@ -17,14 +17,14 @@ class RfidRegistration(tk.Frame):
         super().__init__(parent, bg="#b2e5ed")
         self.controller = controller
         
-        # 1. State Variables (Define these FIRST)
+        
         self.selected_registration_id = None
         self.is_edit_mode = False
         self.page_size = 15
         self.current_page = 1
         self.total_records = 0
 
-        # 2. StringVars (These MUST exist before create_form is called)
+        
         self.rfid_var = tk.StringVar()
         self.fetcher_code_var = tk.StringVar()
         self.fetcher_code_var.trace_add("write", lambda *a: self.autofill_record("fetcher"))
@@ -43,27 +43,25 @@ class RfidRegistration(tk.Frame):
         self.teacher_var = tk.StringVar()
         self.search_var = tk.StringVar() # Moved search_var here too
 
-        # 3. Serial Setup
+        
         self.ser = None
         self.start_serial_thread()
 
-        # 4. UI Layout (Now you can build the UI because variables exist)
-        # ================= HEADER =================
+        
         header = tk.Frame(self, bg="#0047AB", height=65)
         header.pack(fill="x")
         tk.Label(header, text="RFID SYSTEM REGISTRATION",
                  font=("Arial", 20, "bold"), bg="#0047AB", fg="white").pack(side="left", padx=20, pady=15)
-        # ================= TOP SECTION: FORMS & PHOTOS =================
+        
         top_container = tk.Frame(self, bg="#b2e5ed")
         top_container.pack(fill="x", padx=20, pady=10)
 
-        # 1. Left Side: Fetcher Photo
-        # We wrap the photo in a frame so it's easier to manage
+        
         f_photo_frame = tk.Frame(top_container, bg="#b2e5ed")
         f_photo_frame.pack(side="left", padx=10)
         self.fetcher_photo_lbl = self.create_photo_box(f_photo_frame, "Fetcher")
 
-        # 2. Center: Input Forms
+        
         form_center_frame = tk.Frame(top_container, bg="#b2e5ed")
         form_center_frame.pack(side="left", expand=True)
 
@@ -86,12 +84,12 @@ class RfidRegistration(tk.Frame):
             ("Adviser", self.teacher_var)
         ], 1)
 
-        # 3. Right Side: Student Photo
+        
         s_photo_frame = tk.Frame(top_container, bg="#b2e5ed")
         s_photo_frame.pack(side="right", padx=10)
         self.student_photo_lbl = self.create_photo_box(s_photo_frame, "Student")
 
-        # ================= MIDDLE SECTION: BUTTONS & STATUS =================
+        
         action_frame = tk.Frame(self, bg="#b2e5ed")
         action_frame.pack(fill="x", pady=5)
 
@@ -116,11 +114,11 @@ class RfidRegistration(tk.Frame):
                             font=("Arial", 10, "bold"), width=15, command=self.toggle_status)
         self.status_btn.pack(side="left", padx=5)
 
-        # ================= BOTTOM SECTION: SEARCH & TABLE =================
+        
         table_main_container = tk.Frame(self, bg="white", bd=1, relief="solid")
         table_main_container.pack(fill="both", expand=True, padx=20, pady=(0, 20))
 
-        # Search Bar moved inside the table container for better grouping
+        
         search_row = tk.Frame(table_main_container, bg="#f0f0f0")
         search_row.pack(fill="x", padx=5, pady=5)
         
@@ -134,7 +132,7 @@ class RfidRegistration(tk.Frame):
         tk.Label(search_row, textvariable=self.count_var, font=("Arial", 10, "bold"), 
                  fg="#2E7D32", bg="#f0f0f0").pack(side="right", padx=10)
 
-        # Treeview
+        
         cols = ("id", "f_name", "s_name", "f_rfid", "s_rfid" , "status")
         self.table = ttk.Treeview(table_main_container, columns=cols, show="headings", height=10)
         self.table.heading("id", text="ID")
@@ -151,7 +149,7 @@ class RfidRegistration(tk.Frame):
         self.table.pack(fill="both", expand=True)
         self.table.bind("<<TreeviewSelect>>", self.on_row_select)
 
-        # Pagination
+        
         nav_frame = tk.Frame(table_main_container, bg="#f0f0f0")
         nav_frame.pack(fill="x")
         tk.Button(nav_frame, text="◀ PREV", command=self.prev_page).pack(side="left", padx=20, pady=5)
@@ -159,7 +157,7 @@ class RfidRegistration(tk.Frame):
         self.page_lbl.pack(side="left", expand=True)
         tk.Button(nav_frame, text="NEXT ▶", command=self.next_page).pack(side="right", padx=20, pady=5)
 
-    # ================= LOGIC METHODS =================
+    
 
     def create_form(self, parent, title, fields, col):
         frame = tk.LabelFrame(parent, text=title, font=("Arial", 10, "bold"), bg="white", padx=10, pady=10)
@@ -201,23 +199,16 @@ class RfidRegistration(tk.Frame):
             except: break
     # ================= REFINED RFID HANDLING =================
     def handle_rfid_scan(self, uid):
-        """
-        Logic: 
-        1. If Fetcher RFID is empty, assign it.
-        2. If Fetcher is filled but Student is empty, assign Student.
-        3. Prevents duplicate scanning of the same tag for both roles.
-        """
+       
         if self.add_btn["text"] != "SAVE PAIR" and not self.is_edit_mode:
             return 
         
-        # Step 1: Assign Fetcher Tag
+        
         if not self.rfid_var.get():
             self.rfid_var.set(uid)
             self.status_var.set(f"✅ FETCHER TAG: {uid}")
-            # Optional: Check if this tag is already in 'fetcher' table to autofill code
             self.find_owner_by_rfid(uid, "fetcher")
             
-        # Step 2: Assign Student Tag (must be different from Fetcher Tag)
         elif not self.student_rfid_var.get():
             if uid == self.rfid_var.get():
                 messagebox.showwarning("Warning", "You cannot use the same RFID for both Fetcher and Student.")
@@ -226,10 +217,10 @@ class RfidRegistration(tk.Frame):
             self.student_rfid_var.set(uid)
             self.paired_rfid_var.set(uid) 
             self.status_var.set(f"✅ STUDENT TAG: {uid}")
-            # Optional: Check if this tag is already in 'student' table to autofill ID
+          
             self.find_owner_by_rfid(uid, "student")
 
-    # ================= DATABASE SYNC LOGIC =================
+    
     def save_record(self):
         f_rfid = str(self.rfid_var.get()).strip()
         s_rfid = str(self.student_rfid_var.get()).strip()
@@ -242,7 +233,13 @@ class RfidRegistration(tk.Frame):
         try:
             with db_connect() as conn:
                 with conn.cursor() as cur:
-                    # 1. Update/Insert Registration Pairing
+                    # CHECK FOR DUPLICATE LINK (Only for new pairings)
+                    if not self.is_edit_mode:
+                        cur.execute("SELECT * FROM registrations WHERE fetcher_code=%s AND student_id=%s", (f_code, s_id))
+                        if cur.fetchone():
+                            messagebox.showwarning("Duplicate", "This student is already linked to this fetcher.")
+                            return
+
                     if self.is_edit_mode:
                         sql = """UPDATE registrations SET 
                                  rfid=%s, fetcher_name=%s, fetcher_code=%s, student_id=%s, 
@@ -265,15 +262,25 @@ class RfidRegistration(tk.Frame):
                                           self.teacher_var.get(), self.fetcher_address_var.get(),
                                           self.fetcher_contact_var.get(), s_rfid, s_rfid))
 
-                    # 2. CROSS-TABLE SYNC (THE FIX IS HERE)
-                    # Note: Ensure these column names (rfid_tag) exist in your student/fetcher tables
-                    # If you get an error here, check if the column is named 'rfid_tag' or 'student_rfid'
-                    cur.execute("UPDATE student SET student_rfid=%s WHERE Student_id=%s", (s_rfid, s_id))
+                    # Update Master Records
+                    cur.execute("UPDATE student SET student_rfid=%s WHERE student_id=%s", (s_rfid, s_id))
                     cur.execute("UPDATE fetcher SET rfid=%s WHERE fetcher_code=%s", (f_rfid, f_code))
                     
                     conn.commit()
             
-            messagebox.showinfo("Success", "Pairing complete and Master Records Updated!")
+            # --- THE "ADD ANOTHER" LOGIC ---
+            if not self.is_edit_mode:
+                if messagebox.askyesno("Success", "Student linked! Would you like to link ANOTHER student to this fetcher?"):
+                    # Clear Student side, keep Fetcher side
+                    self.clear_subfields("student")
+                    self.student_rfid_var.set("")
+                    self.student_id_var.set("")
+                    self.paired_rfid_var.set("") 
+                    self.status_var.set("Ready for next Student Tag...")
+                    self.load_data() 
+                    return 
+
+            messagebox.showinfo("Success", "Process completed.")
             self.reset_load()
             
         except Exception as e:
@@ -311,7 +318,7 @@ class RfidRegistration(tk.Frame):
                             self.fetcher_contact_var.set(data.get("contact", ""))
                             self.fetcher_address_var.set(data.get("Address", ""))
 
-                        # Load Photo from BLOB
+                        
                         blob = data.get("photo_path")
                         if blob:
                             img = Image.open(io.BytesIO(blob)).resize((110, 110))

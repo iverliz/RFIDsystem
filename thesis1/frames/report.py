@@ -15,7 +15,6 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
 from utils.database import db_connect
 
-
 class Report(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent, bg="#e0f7fa")
@@ -35,8 +34,11 @@ class Report(tk.Frame):
 
         # ================= FILTER SECTION =================
         content = tk.Frame(self, bg="#e0f7fa")
-        content.pack(fill="both", expand=True, padx=15, pady=10)
+        content.pack(fill="both", expand=True, padx=15, pady=5)
+        
+        # Configure content to allow tables to expand
         content.columnconfigure((0, 1), weight=1)
+        content.rowconfigure(1, weight=1) # Give the tables frame weight
 
         filter_card = tk.Frame(content, bg="white", bd=2, relief="groove")
         filter_card.grid(row=0, column=0, columnspan=2, sticky="ew", pady=5, padx=5)
@@ -65,8 +67,11 @@ class Report(tk.Frame):
 
         # ================= TABLES =================
         tables = tk.Frame(content, bg="#e0f7fa")
-        tables.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=10)
+        tables.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=5)
+        
+        # Ensure tables expand equally
         tables.columnconfigure((0, 1), weight=1)
+        tables.rowconfigure((0, 1), weight=1)
 
         self.student_table = self.create_table(
             tables, "STUDENTS",
@@ -84,8 +89,9 @@ class Report(tk.Frame):
         )
 
         # ================= BUTTONS =================
+        # Pack this at the bottom to ensure it's always visible
         btn_frame = tk.Frame(self, bg="#e0f7fa")
-        btn_frame.pack(pady=10)
+        btn_frame.pack(side="bottom", pady=10)
 
         tk.Button(
             btn_frame,
@@ -113,13 +119,12 @@ class Report(tk.Frame):
 
         self.apply_filter()
 
-    # ================= TABLE CREATOR =================
     def create_table(self, parent, title, columns, r, c, colspan=1):
         frame = tk.Frame(parent, bg="white", bd=2, relief="groove")
-        frame.grid(row=r, column=c, columnspan=colspan, padx=5, pady=6, sticky="nsew")
-        tk.Label(frame, text=title, font=("Arial", 13, "bold"), bg="white").pack(pady=4)
+        frame.grid(row=r, column=c, columnspan=colspan, padx=5, pady=3, sticky="nsew")
+        tk.Label(frame, text=title, font=("Arial", 11, "bold"), bg="white").pack(pady=2)
 
-        tree = ttk.Treeview(frame, columns=columns, show="headings", height=6)
+        tree = ttk.Treeview(frame, columns=columns, show="headings", height=5)
         tree.pack(side="left", fill="both", expand=True, padx=5, pady=2)
 
         scrollbar = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
@@ -128,10 +133,10 @@ class Report(tk.Frame):
 
         for col in columns:
             tree.heading(col, text=col)
-            tree.column(col, width=130, anchor="center")
+            tree.column(col, width=100, anchor="center")
 
         tree.count_var = tk.StringVar(value="Total: 0")
-        tk.Label(frame, textvariable=tree.count_var, bg="white", fg="#0047AB", font=("Arial", 10, "bold")).pack(pady=2)
+        tk.Label(frame, textvariable=tree.count_var, bg="white", fg="#0047AB", font=("Arial", 9, "bold")).pack(pady=2)
         return tree
 
     # ================= DATABASE FETCH =================
