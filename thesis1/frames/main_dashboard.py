@@ -1,5 +1,5 @@
 import tkinter as tk
-import os
+from tkinter import messagebox  # Added for logout notification
 
 from frames.history_log import RFIDHistory
 from frames.report import Report
@@ -8,9 +8,7 @@ from frames.teacher_record import TeacherRecord
 from frames.student_record import StudentRecord
 from frames.fetcher_record import FetcherRecord
 from frames.rfid_registration import RfidRegistration
-from frames.enrollthisyear import EnrollThisYear
-
-SESSION_FILE = "session.txt"
+from frames.Classroom import ClassroomFrame
 
 # Reusable hover effect
 def add_hover_effect(widget, hover_bg, default_bg):
@@ -21,6 +19,12 @@ class MainDashboard(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
+        
+        # Pull the current user data from the controller (Role-based access)
+        # Default to Teacher if session is missing for safety
+        self.user_data = getattr(self.controller, "current_user", {"role": "Teacher", "username": "User"})
+        self.role = self.user_data.get("role", "Teacher")
+        
         self.configure(bg="#e0f7fa")
         self.pack(fill="both", expand=True)
 
@@ -40,15 +44,20 @@ class MainDashboard(tk.Frame):
             font=("Arial", 16, "bold")
         ).pack(pady=20)
 
-        # ================= MENU BUTTONS =================
-        self.create_menu_button("Student Record", StudentRecord)
-        self.create_menu_button("Teacher Record", TeacherRecord)
-        self.create_menu_button("Fetcher Record", FetcherRecord)
-        self.create_menu_button("RFID Registration", RfidRegistration)
-        self.create_menu_button("Enroll This Year", EnrollThisYear)
-        self.create_menu_button("History Log", RFIDHistory)
-        self.create_menu_button("Account Settings", Account)
-        self.create_menu_button("Reports", Report)
+        # ================= ROLE-BASED MENU BUTTONS =================
+        # Logic: Admins see everything. Teachers only see Classroom and Account.
+        
+        if self.role == "Admin":
+            self.create_menu_button("Student Record", StudentRecord)
+            self.create_menu_button("Teacher Record", TeacherRecord)
+            self.create_menu_button("Fetcher Record", FetcherRecord)
+            self.create_menu_button("RFID Registration", RfidRegistration)
+            self.create_menu_button("History Log", RFIDHistory)
+            self.create_menu_button("Reports", Report)
+            self.create_menu_button("Account Settings", Account)
+        else:
+            # Teacher Role Restriction
+            self.create_menu_button("My Classroom", ClassroomFrame)
 
         # ================= MAIN AREA =================
         self.main_area = tk.Frame(self, bg="#e0f7fa")
@@ -58,9 +67,12 @@ class MainDashboard(tk.Frame):
         self.topbar = tk.Frame(self.main_area, height=50, bg="#26c6da", bd=2, relief="groove")
         self.topbar.pack(fill="x")
 
+        # Dynamic Title based on role
+        panel_title = "SYSTEM ADMINISTRATION" if self.role == "Admin" else f"TEACHER PANEL: {self.user_data.get('username').upper()}"
+        
         tk.Label(
             self.topbar,
-            text="CAINTA CATHOLIC COLLEGE - SYSTEM ADMINISTRATION",
+            text=f"CAINTA CATHOLIC COLLEGE - {panel_title}",
             bg="#26c6da",
             fg="white",
             font=("Arial", 14, "bold")
@@ -82,14 +94,18 @@ class MainDashboard(tk.Frame):
         add_hover_effect(logout_btn, "#e63946", "#ff6b6b")
 
         # ================= OPEN DEFAULT FRAME =================
-        self.open_frame(StudentRecord)
+        # Logic: If Admin, open Student Record. If Teacher, open Classroom Frame.
+        if self.role == "Admin":
+            self.open_frame(StudentRecord)
+        else:
+            self.open_frame(ClassroomFrame)
 
-    # ================= OPEN FRAME =================
     def open_frame(self, frame_class):
         try:
             if self.current_frame:
                 self.current_frame.destroy()
 
+            # Pass self.controller so sub-frames can access the main app
             self.current_frame = frame_class(self.main_area, self.controller)
             self.current_frame.pack(fill="both", expand=True)
 
@@ -97,9 +113,8 @@ class MainDashboard(tk.Frame):
             for btn, cls in self.menu_buttons.items():
                 btn.config(bg="#00838f" if cls == frame_class else "#00acc1")
         except Exception as e:
-            tk.messagebox.showerror("Error", f"Failed to open {frame_class.__name__}:\n{e}")
+            messagebox.showerror("Error", f"Failed to open {frame_class.__name__}:\n{e}")
 
-    # ================= CREATE MENU BUTTON =================
     def create_menu_button(self, text, frame_class):
         btn = tk.Button(
             self.sidebar,
@@ -114,26 +129,16 @@ class MainDashboard(tk.Frame):
             command=lambda: self.open_frame(frame_class)
         )
         btn.pack(fill="x", pady=2)
-
         add_hover_effect(btn, "#00838f", "#00acc1")
         self.menu_buttons[btn] = frame_class
 
-    # ================= LOGOUT FUNCTION =================
+    # ================= UPDATED LOGOUT FUNCTION =================
     def logout(self):
-        # Remove session file securely
-        try:
-            if os.path.exists(SESSION_FILE):
-                os.remove(SESSION_FILE)
-        except:
-            pass
-
-        # Reset all sensitive data in frames
-        for frame in self.controller.frames.values():
-            for attr in ["username", "password"]:
-                if hasattr(frame, attr):
-                    widget = getattr(frame, attr)
-                    if isinstance(widget, tk.Entry):
-                        widget.delete(0, tk.END)
-
-        self.controller.show_frame("LoginFrame")
-        tk.messagebox.showinfo("Logout", "You are now logged out.")
+        # 1. Ask for confirmation
+        confirm = messagebox.askyesno("Logout", "Are you sure you want to log out?")
+        if confirm:
+            # 2. Clear the variable in the main app
+            self.controller.logout()
+            
+            # 3. Inform the user
+            messagebox.showinfo("Logout", "You have been logged out.")

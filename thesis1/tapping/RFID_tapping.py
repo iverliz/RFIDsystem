@@ -32,6 +32,7 @@ class SerialThread(QThread):
         self.baud = baud
         self.ser = None
 
+<<<<<<< HEAD
     def run(self):
         try:
             self.ser = serial.Serial(self.port, self.baud, timeout=1)
@@ -43,6 +44,9 @@ class SerialThread(QThread):
                     self.uid_scanned.emit(clean_uid)
         except Exception as e:
             print("Serial error:", e)
+=======
+   
+>>>>>>> 7fa7113d7eafaea73617768a3a2c5c8696fef72f
 
     def write(self, message):
         if self.ser and self.ser.is_open:
