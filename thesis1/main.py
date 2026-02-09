@@ -71,11 +71,6 @@ class Rfid(tk.Tk):
     def dispatch_rfid(self, uid):
         active_frame = self.frames.get(self.current_frame_name)
         
-        # DEBUG: Let's see what's actually happening in the console
-        print(f"--- RFID DETECTED ---")
-        print(f"UID: {uid}")
-        print(f"Current Frame: {self.current_frame_name}")
-        
         if not active_frame: 
             print("Debug: Active frame object not found in dictionary.")
             return
@@ -103,6 +98,36 @@ class Rfid(tk.Tk):
             self.frames[FrameClass.__name__] = frame
             frame.place(relwidth=1, relheight=1)
         self.show_frame("MainDashboard")
+        
+    def start_serial_listener(self):
+        def listen():
+            # Auto-detect COM port
+            ports = list(serial.tools.list_ports.comports())
+            target_port = next((p.device for p in ports if any(x in p.description for x in ["USB", "CH340", "Arduino"])), "COM3")
+            
+            try:
+                self.ser = serial.Serial(target_port, 9600, timeout=0.1)
+                print(f"Connected to Arduino on {target_port}")
+            except Exception as e:
+                print(f"Serial Error: {e}")
+                return
+
+            while self.running:
+                try:
+                    if self.ser and self.ser.is_open and self.ser.in_waiting:
+                        # Change this line inside start_serial_listener -> listen()
+                        line = self.ser.readline().decode('utf-8', errors='ignore').strip().replace('\r', '')
+                        if line:
+                            # Clean the UID string (removes "UID Tag: " prefix if present)
+                            uid = line.split(":")[-1].strip() if ":" in line else line
+                            self.after(0, self.dispatch_rfid, uid)
+                except:
+                    break
+            
+            if self.ser: self.ser.close()
+
+        thread = threading.Thread(target=listen, daemon=True)
+        thread.start()
 
     def logout(self):
         self.current_user = None 
@@ -120,3 +145,4 @@ if __name__ == "__main__":
     app = Rfid()
     app.protocol("WM_DELETE_WINDOW", app.on_closing)
     app.mainloop()
+    

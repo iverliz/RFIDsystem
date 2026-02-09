@@ -6,7 +6,5 @@ def db_connect():
         user="root",
         password="johnjohn6581506",
         database="rfid_system",
-        port = 3306,
-        auth_plugin='mysql_native_password'
     )
 # johnjohn6581506
