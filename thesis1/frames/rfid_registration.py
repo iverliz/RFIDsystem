@@ -1,14 +1,13 @@
 import tkinter as tk
 from tkinter import messagebox, ttk
 import sys, os
-import serial, threading, time
-import serial.tools.list_ports
 from PIL import Image, ImageTk
 import io
 
 # ================= PATH SETUP =================
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(BASE_DIR)
+if BASE_DIR not in sys.path:
+    sys.path.append(BASE_DIR)
 
 from utils.database import db_connect
 
@@ -17,17 +16,16 @@ class RfidRegistration(tk.Frame):
         super().__init__(parent, bg="#b2e5ed")
         self.controller = controller
         
-        
+        # State Management
         self.selected_registration_id = None
         self.is_edit_mode = False
         self.page_size = 15
         self.current_page = 1
         self.total_records = 0
 
-        
+        # Define Variables
         self.rfid_var = tk.StringVar()
         self.fetcher_code_var = tk.StringVar()
-        self.fetcher_code_var.trace_add("write", lambda *a: self.autofill_record("fetcher"))
         self.fetcher_name_var = tk.StringVar()         
         self.fetcher_address_var = tk.StringVar()      
         self.fetcher_contact_var = tk.StringVar()      
@@ -35,19 +33,24 @@ class RfidRegistration(tk.Frame):
 
         self.student_rfid_var = tk.StringVar() 
         self.student_id_var = tk.StringVar()
-        self.student_id_var.trace_add("write", lambda *a: self.autofill_record("student"))
         self.student_name_var = tk.StringVar()
         self.guardian_name_var = tk.StringVar() 
         self.guardian_contact_var = tk.StringVar()
         self.grade_var = tk.StringVar()        
         self.teacher_var = tk.StringVar()
-        self.search_var = tk.StringVar() # Moved search_var here too
+        self.search_var = tk.StringVar()
+        self.status_var = tk.StringVar(value="System Ready")
+        self.count_var = tk.StringVar(value="Linked Students: 0")
 
-        
-        self.ser = None
-        self.start_serial_thread()
+        # Traces for Autofill
+        self.fetcher_code_var.trace_add("write", lambda *a: self.autofill_record("fetcher"))
+        self.student_id_var.trace_add("write", lambda *a: self.autofill_record("student"))
 
-        
+        self.setup_ui()
+        self.reset_load()
+
+    def setup_ui(self):
+        # Header
         header = tk.Frame(self, bg="#0047AB", height=65)
         header.pack(fill="x")
         tk.Label(header, text="RFID SYSTEM REGISTRATION",
@@ -56,15 +59,15 @@ class RfidRegistration(tk.Frame):
         top_container = tk.Frame(self, bg="#b2e5ed")
         top_container.pack(fill="x", padx=20, pady=10)
 
-        
+        # Photo Boxes
         f_photo_frame = tk.Frame(top_container, bg="#b2e5ed")
         f_photo_frame.pack(side="left", padx=10)
         self.fetcher_photo_lbl = self.create_photo_box(f_photo_frame, "Fetcher")
 
-        
         form_center_frame = tk.Frame(top_container, bg="#b2e5ed")
         form_center_frame.pack(side="left", expand=True)
 
+        # Forms
         self.fetcher_entries = self.create_form(form_center_frame, "FETCHER DETAILS", [
             ("RFID Tag", self.rfid_var),
             ("Name", self.fetcher_name_var),          
@@ -84,16 +87,13 @@ class RfidRegistration(tk.Frame):
             ("Adviser", self.teacher_var)
         ], 1)
 
-        
         s_photo_frame = tk.Frame(top_container, bg="#b2e5ed")
         s_photo_frame.pack(side="right", padx=10)
         self.student_photo_lbl = self.create_photo_box(s_photo_frame, "Student")
 
-        
+        # Action Buttons
         action_frame = tk.Frame(self, bg="#b2e5ed")
         action_frame.pack(fill="x", pady=5)
-
-        self.status_var = tk.StringVar(value="Ready")
         tk.Label(action_frame, textvariable=self.status_var, font=("Arial", 10, "italic"), 
                  fg="#0047AB", bg="#b2e5ed").pack()
 
@@ -103,235 +103,344 @@ class RfidRegistration(tk.Frame):
         self.add_btn = tk.Button(btn_row, text="NEW PAIRING", bg="#4CAF50", fg="white", 
                                 font=("Arial", 10, "bold"), width=15, command=self.toggle_add)
         self.add_btn.pack(side="left", padx=5)
+        
         self.edit_btn = tk.Button(btn_row, text="EDIT RECORD", bg="#2196F3", fg="white", 
                                  font=("Arial", 10, "bold"), width=15, command=self.toggle_edit)
         self.edit_btn.pack(side="left", padx=5)
+        
         self.delete_btn = tk.Button(btn_row, text="DELETE", bg="#F44336", fg="white", 
                                    font=("Arial", 10, "bold"), width=15, command=self.delete_record)
         self.delete_btn.pack(side="left", padx=5)
         
         self.status_btn = tk.Button(btn_row, text="TOGGLE STATUS", bg="#607D8B", fg="white", 
-                            font=("Arial", 10, "bold"), width=15, command=self.toggle_status)
+                                font=("Arial", 10, "bold"), width=15, command=self.toggle_status)
         self.status_btn.pack(side="left", padx=5)
 
-        
+        # Table Section
         table_main_container = tk.Frame(self, bg="white", bd=1, relief="solid")
         table_main_container.pack(fill="both", expand=True, padx=20, pady=(0, 20))
 
-        
         search_row = tk.Frame(table_main_container, bg="#f0f0f0")
         search_row.pack(fill="x", padx=5, pady=5)
-        
-        tk.Label(search_row, text="Search Records:", bg="#f0f0f0", font=("Arial", 10, "bold")).pack(side="left", padx=5)
-        self.search_var = tk.StringVar()
-        tk.Entry(search_row, textvariable=self.search_var, font=("Arial", 12), width=30).pack(side="left", padx=5)
-        tk.Button(search_row, text="🔍 Search", command=self.search_records).pack(side="left", padx=2)
-        tk.Button(search_row, text="Clear", command=self.reset_load).pack(side="left", padx=2)
+        tk.Label(search_row, text="Search:", bg="#f0f0f0", font=("Arial", 10, "bold")).pack(side="left", padx=5)
+        tk.Entry(search_row, textvariable=self.search_var, font=("Arial", 11)).pack(side="left", padx=5)
+        tk.Button(search_row, text="🔍", command=self.search_records).pack(side="left")
+        tk.Button(search_row, text="Reset", command=self.reset_load).pack(side="left", padx=5)
+        tk.Label(search_row, textvariable=self.count_var, font=("Arial", 10, "bold"), bg="#f0f0f0", fg="green").pack(side="right", padx=10)
 
-        self.count_var = tk.StringVar(value="Linked Students: 0")
-        tk.Label(search_row, textvariable=self.count_var, font=("Arial", 10, "bold"), 
-                 fg="#2E7D32", bg="#f0f0f0").pack(side="right", padx=10)
-
-        
         cols = ("id", "f_name", "s_name", "f_rfid", "s_rfid" , "status")
         self.table = ttk.Treeview(table_main_container, columns=cols, show="headings", height=10)
-        self.table.heading("id", text="ID")
-        self.table.heading("f_name", text="Fetcher")
-        self.table.heading("s_name", text="Student")
-        self.table.heading("f_rfid", text="F-RFID")
-        self.table.heading("s_rfid", text="S-RFID")
-        self.table.heading("status", text="Status")
-        self.table.column("status", width=80, anchor="center")
-        for col in cols: self.table.column(col, anchor="center")
-        self.table.column("id", width=50)
-        self.table.tag_configure("Active", foreground="green")
-        self.table.tag_configure("Inactive", foreground="red")
+        for col in cols:
+            self.table.heading(col, text=col.upper())
+            self.table.column(col, anchor="center")
         self.table.pack(fill="both", expand=True)
         self.table.bind("<<TreeviewSelect>>", self.on_row_select)
 
-        
-        nav_frame = tk.Frame(table_main_container, bg="#f0f0f0")
-        nav_frame.pack(fill="x")
-        tk.Button(nav_frame, text="◀ PREV", command=self.prev_page).pack(side="left", padx=20, pady=5)
-        self.page_lbl = tk.Label(nav_frame, text="Page 1", bg="#f0f0f0", font=("Arial", 10, "bold"))
-        self.page_lbl.pack(side="left", expand=True)
-        tk.Button(nav_frame, text="NEXT ▶", command=self.next_page).pack(side="right", padx=20, pady=5)
+    # ================= FUNCTIONAL LOGIC =================
 
-    
+    def handle_rfid_scan(self, uid): 
+        """Called by main.py whenever a tag is read"""
+        if not self.is_edit_mode and self.add_btn["text"] != "SAVE PAIR":
+            return 
+
+        if not self.rfid_var.get():
+            self.rfid_var.set(uid)
+            self.status_var.set(f"✅ FETCHER TAG: {uid}")
+            self.find_owner_by_rfid(uid, "fetcher")
+        elif not self.student_rfid_var.get():
+            if uid == self.rfid_var.get():
+                messagebox.showwarning("Warning", "UID already assigned to Fetcher.")
+                return
+            self.student_rfid_var.set(uid)
+            self.paired_rfid_var.set(uid) 
+            self.status_var.set(f"✅ STUDENT TAG: {uid}")
+            self.find_owner_by_rfid(uid, "student")
+
+    def save_record(self):
+        # 1. Collect Data from UI Variables
+        f_rfid = self.rfid_var.get().strip()
+        s_rfid = self.student_rfid_var.get().strip()
+        f_code = self.fetcher_code_var.get().strip()
+        s_id = self.student_id_var.get().strip()
+        
+        # Collect other fields (ensure these variables exist in your class)
+        f_name = self.fetcher_name_var.get().strip()
+        s_name = self.student_name_var.get().strip()
+        grade = self.grade_var.get().strip()
+        teacher = self.teacher_var.get().strip()
+        address = self.fetcher_address_var.get().strip()
+        contact = self.fetcher_contact_var.get().strip()
+
+        # 2. Validation
+        if not all([f_rfid, s_rfid, f_code, s_id, f_name, s_name]):
+            messagebox.showerror("Error", "All required fields must be filled.")
+            return
+
+        try:
+            with db_connect() as conn:
+                with conn.cursor() as cur:
+                    
+                    # --- DUPLICATE PROTECTION LOGIC ---
+                    # Logic: We allow the SAME Fetcher RFID for DIFFERENT Students (Siblings).
+                    # But we NEVER allow the SAME Student RFID for different records.
+                    
+                    check_sql = "SELECT student_name FROM registrations WHERE student_rfid = %s"
+                    params = [s_rfid]
+                    
+                    if self.is_edit_mode:
+                        check_sql += " AND registration_id != %s"
+                        params.append(self.selected_registration_id)
+                    
+                    cur.execute(check_sql, tuple(params))
+                    existing_student = cur.fetchone()
+                    
+                    if existing_student:
+                        messagebox.showerror("Duplicate Student Card", 
+                            f"This Student RFID is already assigned to: {existing_student[0]}")
+                        return
+                    # ----------------------------------
+
+                    if self.is_edit_mode:
+                        # Update existing record
+                        sql = """UPDATE registrations SET 
+                                 rfid=%s, fetcher_name=%s, fetcher_code=%s, 
+                                 student_id=%s, student_name=%s, grade=%s, 
+                                 teacher=%s, address=%s, contact=%s, 
+                                 paired_rfid=%s, student_rfid=%s 
+                                 WHERE registration_id=%s"""
+                        cur.execute(sql, (f_rfid, f_name, f_code, s_id, s_name, 
+                                          grade, teacher, address, contact, 
+                                          s_rfid, s_rfid, self.selected_registration_id))
+                    else:
+                        # Insert new record
+                        sql = """INSERT INTO registrations (
+                                 rfid, fetcher_name, fetcher_code, student_id, 
+                                 student_name, grade, teacher, address, 
+                                 contact, paired_rfid, student_rfid, status
+                                 ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, 'Active')"""
+                        cur.execute(sql, (f_rfid, f_name, f_code, s_id, s_name, 
+                                          grade, teacher, address, contact, 
+                                          s_rfid, s_rfid))
+                    
+                    conn.commit()
+
+            # --- SUCCESS & LINKING PROMPT ---
+            messagebox.showinfo("Success", f"Successfully registered {s_name}.")
+            
+            # Ask to link a sibling
+            link_sibling = messagebox.askyesno("Link Sibling", 
+                f"Do you want to link another student to Fetcher: {f_name}?")
+            
+            if link_sibling:
+                # KEEP Fetcher Info, CLEAR Student Info
+                self.student_id_var.set("")
+                self.student_name_var.set("")
+                self.student_rfid_var.set("")
+                
+                # Update UI state for a new entry even if we were just editing
+                self.is_edit_mode = False 
+                self.mode_label.config(text="LINKING NEW SIBLING", bg="#fff9c4", fg="#fbc02d")
+                
+                # Focus on the next student ID to scan
+                if hasattr(self, 'student_id_entry'):
+                    self.student_id_entry.focus_set()
+            else:
+                # Reset the whole form if no more siblings
+                self.reset_load() 
+
+        except Exception as e:
+            messagebox.showerror("Database Error", f"An error occurred: {str(e)}")
+
+    def autofill_record(self, record_type):
+        search_id = self.student_id_var.get().strip() if record_type == "student" else self.fetcher_code_var.get().strip()
+        if not search_id: return self.clear_subfields(record_type)
+
+        query = "SELECT * FROM student WHERE Student_id=%s" if record_type == "student" else "SELECT * FROM fetcher WHERE fetcher_code=%s"
+        try:
+            with db_connect() as conn:
+                with conn.cursor(dictionary=True) as cur:
+                    cur.execute(query, (search_id,))
+                    data = cur.fetchone()
+                    if data:
+                        if record_type == "student":
+                            self.student_name_var.set(data.get("Student_name", ""))
+                            self.grade_var.set(data.get("grade_lvl", ""))
+                            self.teacher_var.set(data.get("Teacher_name", ""))
+                        else:
+                            self.fetcher_name_var.set(data.get("Fetcher_name", ""))
+                            self.fetcher_contact_var.set(data.get("contact", ""))
+                        
+                        # Handle Photo
+                        blob = data.get("photo_path")
+                        lbl = self.student_photo_lbl if record_type == "student" else self.fetcher_photo_lbl
+                        if blob:
+                            img = Image.open(io.BytesIO(blob)).resize((110, 110))
+                            photo = ImageTk.PhotoImage(img)
+                            lbl.config(image=photo, text="")
+                            lbl.image = photo
+                    else:
+                        self.clear_subfields(record_type, "NOT FOUND")
+        except Exception as e:
+            print(f"Autofill error: {e}")
+
+    def find_owner_by_rfid(self, rfid_uid, target_type):
+        """Cross-references a scanned tag with master tables"""
+        table = "fetcher" if target_type == "fetcher" else "student"
+        col_rfid = "rfid" if target_type == "fetcher" else "student_rfid"
+        col_id = "fetcher_code" if target_type == "fetcher" else "Student_id"
+        
+        try:
+            with db_connect() as conn:
+                with conn.cursor(dictionary=True) as cur:
+                    cur.execute(f"SELECT {col_id} FROM {table} WHERE {col_rfid}=%s", (rfid_uid,))
+                    res = cur.fetchone()
+                    if res:
+                        if target_type == "fetcher": self.fetcher_code_var.set(res[col_id])
+                        else: self.student_id_var.set(res[col_id])
+        except Exception as e:
+            print(f"Lookup Error: {e}")
+
+    # ================= UI HELPERS =================
 
     def create_form(self, parent, title, fields, col):
         frame = tk.LabelFrame(parent, text=title, font=("Arial", 10, "bold"), bg="white", padx=10, pady=10)
         frame.grid(row=0, column=col, padx=5, sticky="nsew")
         entries = []
         for i, (label, var) in enumerate(fields):
-            tk.Label(frame, text=label, bg="white").grid(row=i, column=0, sticky="w", pady=2)
-            state = "readonly" if "RFID" in label or "Tag" in label else "normal"
-            ent = tk.Entry(frame, textvariable=var, font=("Arial", 11), width=25, state=state)
+            tk.Label(frame, text=label, bg="white").grid(row=i, column=0, sticky="w")
+            ent = tk.Entry(frame, textvariable=var, font=("Arial", 11), width=22)
             ent.grid(row=i, column=1, pady=2, padx=5)
             entries.append(ent)
         return entries
 
     def create_photo_box(self, parent, label_text):
         container = tk.Frame(parent, bg="white", bd=1, relief="ridge", width=120, height=120)
-        container.pack(side="left", padx=20)
-        container.pack_propagate(False)
-        lbl = tk.Label(container, text=f"No {label_text}\nPhoto", bg="white", font=("Arial", 8))
+        container.pack(padx=10, pady=10); container.pack_propagate(False)
+        lbl = tk.Label(container, text=f"No {label_text}\nPhoto", bg="white")
         lbl.pack(fill="both", expand=True)
         return lbl
 
-    def start_serial_thread(self):
-        def find_and_connect():
-            ports = list(serial.tools.list_ports.comports())
-            target_port = next((p.device for p in ports if any(x in p.description for x in ["USB", "CH340", "Arduino"])), "COM3")
-            try:
-                self.ser = serial.Serial(target_port, 9600, timeout=1)
-                threading.Thread(target=self.serial_listener, daemon=True).start()
-            except: pass
-        threading.Thread(target=find_and_connect, daemon=True).start()
+    def reset_load(self):
+        self.clear_all()
+        self.lock_ui()
+        self.is_edit_mode = False
+        self.selected_registration_id = None
+        self.add_btn.config(text="NEW PAIRING", state="normal")
+        self.edit_btn.config(text="EDIT RECORD", state="normal")
+        self.delete_btn.config(text="DELETE")
+        self.load_data()
 
-    def serial_listener(self):
-        while self.ser and self.ser.is_open:
-            try:
-                if self.ser.in_waiting:
-                    line = self.ser.readline().decode('utf-8', errors='ignore').strip()
-                    if ":" in line: line = line.split(":")[-1].strip()
-                    if line: self.after(0, lambda u=line: self.handle_rfid_scan(u))
-            except: break
-    # ================= REFINED RFID HANDLING =================
-    def handle_rfid_scan(self, uid):
-       
-        if self.add_btn["text"] != "SAVE PAIR" and not self.is_edit_mode:
-            return 
+    def lock_ui(self):
+        for e in self.fetcher_entries + self.student_entries: e.config(state="disabled")
+
+    def unlock_ui(self):
+        for e in self.fetcher_entries + self.student_entries:
+            var_name = str(e.cget("textvariable")).lower()
+            e.config(state="readonly" if "rfid" in var_name else "normal")
+
+    def toggle_add(self):
+        if self.add_btn["text"] == "NEW PAIRING":
+            self.clear_all(); self.unlock_ui()
+            self.add_btn.config(text="SAVE PAIR")
+            self.delete_btn.config(text="CANCEL")
+            self.status_var.set("Waiting for RFID Scan...")
+        else:
+            self.save_record()
+
+    def toggle_edit(self):
+        if not self.selected_registration_id:
+            messagebox.showwarning("Warning", "Please select a record from the table first!")
+            return
         
+        # Change state to Edit Mode
+        self.is_edit_mode = True
+        self.unlock_ui()
         
-        if not self.rfid_var.get():
-            self.rfid_var.set(uid)
-            self.status_var.set(f"✅ FETCHER TAG: {uid}")
-            self.find_owner_by_rfid(uid, "fetcher")
-            
-        elif not self.student_rfid_var.get():
-            if uid == self.rfid_var.get():
-                messagebox.showwarning("Warning", "You cannot use the same RFID for both Fetcher and Student.")
-                return
-                
-            self.student_rfid_var.set(uid)
-            self.paired_rfid_var.set(uid) 
-            self.status_var.set(f"✅ STUDENT TAG: {uid}")
-          
-            self.find_owner_by_rfid(uid, "student")
+        # Update Button UI
+        self.edit_btn.config(text="UPDATE", bg="#FF9800") # Change color to orange for visibility
+        self.add_btn.config(state="disabled")
+        self.delete_btn.config(text="CANCEL")
+        self.status_var.set("EDIT MODE: Modify fields and click UPDATE")
 
-    
-    def save_record(self):
-        f_rfid = str(self.rfid_var.get()).strip()
-        s_rfid = str(self.student_rfid_var.get()).strip()
-        f_code = str(self.fetcher_code_var.get()).strip()
-        s_id = str(self.student_id_var.get()).strip()
+    def clear_all(self):
+        for var in [self.rfid_var, self.student_rfid_var, self.fetcher_code_var, self.student_id_var, 
+                    self.fetcher_name_var, self.student_name_var, self.grade_var, self.teacher_var,
+                    self.fetcher_address_var, self.fetcher_contact_var, self.paired_rfid_var]:
+            var.set("")
+        self.fetcher_photo_lbl.config(image="", text="No Photo")
+        self.student_photo_lbl.config(image="", text="No Photo")
 
-        if not all([f_rfid, s_rfid, f_code, s_id]):
-            return messagebox.showerror("Missing Info", "Ensure both RFIDs are scanned and IDs are entered.")
+    def clear_subfields(self, record_type, status="NO PHOTO"):
+        lbl = self.student_photo_lbl if record_type == "student" else self.fetcher_photo_lbl
+        lbl.config(image="", text=status)
 
+    def load_data(self):
+        self.table.delete(*self.table.get_children())
         try:
             with db_connect() as conn:
                 with conn.cursor() as cur:
-                    # CHECK FOR DUPLICATE LINK (Only for new pairings)
-                    if not self.is_edit_mode:
-                        cur.execute("SELECT * FROM registrations WHERE fetcher_code=%s AND student_id=%s", (f_code, s_id))
-                        if cur.fetchone():
-                            messagebox.showwarning("Duplicate", "This student is already linked to this fetcher.")
-                            return
+                    cur.execute("SELECT registration_id, fetcher_name, student_name, rfid, student_rfid, status FROM registrations")
+                    for row in cur.fetchall():
+                        self.table.insert("", "end", values=row)
+        except Exception as e: print(f"Load Error: {e}")
 
-                    if self.is_edit_mode:
-                        sql = """UPDATE registrations SET 
-                                 rfid=%s, fetcher_name=%s, fetcher_code=%s, student_id=%s, 
-                                 student_name=%s, grade=%s, teacher=%s, address=%s, 
-                                 contact=%s, paired_rfid=%s, student_rfid=%s
-                                 WHERE registration_id=%s"""
-                        
-                        cur.execute(sql, (f_rfid, self.fetcher_name_var.get(), f_code, s_id,
-                                          self.student_name_var.get(), self.grade_var.get(),
-                                          self.teacher_var.get(), self.fetcher_address_var.get(),
-                                          self.fetcher_contact_var.get(), s_rfid, s_rfid, 
-                                          self.selected_registration_id))
-                    else:
-                        sql = """INSERT INTO registrations (rfid, fetcher_name, fetcher_code, student_id, 
-                                 student_name, grade, teacher, address, contact, paired_rfid, student_rfid, status) 
-                                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, 'Active')"""
-                        
-                        cur.execute(sql, (f_rfid, self.fetcher_name_var.get(), f_code, s_id,
-                                          self.student_name_var.get(), self.grade_var.get(),
-                                          self.teacher_var.get(), self.fetcher_address_var.get(),
-                                          self.fetcher_contact_var.get(), s_rfid, s_rfid))
-
-                    # Update Master Records
-                    cur.execute("UPDATE student SET student_rfid=%s WHERE student_id=%s", (s_rfid, s_id))
-                    cur.execute("UPDATE fetcher SET rfid=%s WHERE fetcher_code=%s", (f_rfid, f_code))
-                    
-                    conn.commit()
-            
-            # --- THE "ADD ANOTHER" LOGIC ---
-            if not self.is_edit_mode:
-                if messagebox.askyesno("Success", "Student linked! Would you like to link ANOTHER student to this fetcher?"):
-                    # Clear Student side, keep Fetcher side
-                    self.clear_subfields("student")
-                    self.student_rfid_var.set("")
-                    self.student_id_var.set("")
-                    self.paired_rfid_var.set("") 
-                    self.status_var.set("Ready for next Student Tag...")
-                    self.load_data() 
-                    return 
-
-            messagebox.showinfo("Success", "Process completed.")
-            self.reset_load()
-            
-        except Exception as e:
-            messagebox.showerror("Sync Error", f"Database error: {e}")
-            
-    def autofill_record(self, record_type="student", *args):
-        if record_type == "student":
-            search_id = self.student_id_var.get().strip()
-            query = "SELECT * FROM student WHERE Student_id=%s"
-            photo_lbl = self.student_photo_lbl
-        else:
-            search_id = self.fetcher_code_var.get().strip()
-            query = "SELECT * FROM fetcher WHERE fetcher_code=%s"
-            photo_lbl = self.fetcher_photo_lbl 
-
-        if not search_id:
-            self.clear_subfields(record_type)
+    def on_row_select(self, event):
+        selection = self.table.focus()
+        if not selection: 
             return
-
+            
+        # Get the Registration ID from the first column of the selected row
+        item = self.table.item(selection, "values")
+        self.selected_registration_id = item[0]
+        
         try:
             with db_connect() as conn:
-                with conn.cursor(dictionary=True) as cursor:
-                    cursor.execute(query, (search_id,))
-                    data = cursor.fetchone()
+                with conn.cursor(dictionary=True) as cur:
+                    cur.execute("SELECT * FROM registrations WHERE registration_id=%s", (self.selected_registration_id,))
+                    r = cur.fetchone()
                     
-                    if data:
-                        if record_type == "student":
-                            self.student_name_var.set(data.get("Student_name", ""))
-                            self.grade_var.set(data.get("grade_lvl", ""))
-                            self.teacher_var.set(data.get("Teacher_name", ""))
-                            self.guardian_name_var.set(data.get("Guardian_name", ""))
-                            self.guardian_contact_var.set(data.get("Guardian_contact", ""))
-                        else:
-                            self.fetcher_name_var.set(data.get("Fetcher_name", ""))
-                            self.fetcher_contact_var.set(data.get("contact", ""))
-                            self.fetcher_address_var.set(data.get("Address", ""))
-
+                    if r:
+                        # Populate all variables with the database record
+                        self.rfid_var.set(r['rfid'])
+                        self.fetcher_name_var.set(r['fetcher_name'])
+                        self.fetcher_code_var.set(r['fetcher_code'])
+                        self.student_id_var.set(r['student_id'])
+                        self.student_name_var.set(r['student_name'])
+                        self.grade_var.set(r['grade'])
+                        self.teacher_var.set(r['teacher'])
+                        self.fetcher_address_var.set(r['address'])
+                        self.fetcher_contact_var.set(r['contact'])
+                        self.paired_rfid_var.set(r['paired_rfid'])
+                        self.student_rfid_var.set(r['student_rfid'])
                         
-                        blob = data.get("photo_path")
-                        if blob:
-                            img = Image.open(io.BytesIO(blob)).resize((110, 110))
-                            photo = ImageTk.PhotoImage(img)
-                            photo_lbl.config(image=photo, text="")
-                            photo_lbl.image = photo 
-                        else:
-                            photo_lbl.config(image="", text="NO PHOTO")
-                    else:
-                        self.clear_subfields(record_type, status="NOT FOUND")
+                        # Update student count label
+                        self.update_student_count(r['fetcher_name'])
+                        self.status_var.set(f"Selected Record ID: {self.selected_registration_id}")
         except Exception as e:
-            print(f"Autofill Error: {e}")
+            print(f"Error selecting row: {e}")
 
+    def delete_record(self):
+        if self.delete_btn["text"] == "CANCEL": return self.reset_load()
+        if not self.selected_registration_id: return
+        if messagebox.askyesno("Confirm", "Delete record?"):
+            with db_connect() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("DELETE FROM registrations WHERE registration_id=%s", (self.selected_registration_id,))
+                    conn.commit()
+            self.reset_load()
+
+    def toggle_status(self):
+        # Implementation to switch Active/Inactive
+        pass
+
+    def search_records(self):
+        q = f"%{self.search_var.get()}%"
+        self.table.delete(*self.table.get_children())
+        with db_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT registration_id, fetcher_name, student_name, rfid, student_rfid, status FROM registrations WHERE fetcher_name LIKE %s OR student_name LIKE %s", (q, q))
+                for row in cur.fetchall(): self.table.insert("", "end", values=row)
+                
     def update_student_count(self, name):
         try:
             with db_connect() as conn:
@@ -339,171 +448,5 @@ class RfidRegistration(tk.Frame):
                     cursor.execute("SELECT COUNT(*) as total FROM registrations WHERE fetcher_name=%s", (name,))
                     count_res = cursor.fetchone()
                     self.count_var.set(f"Linked Students: {count_res['total']}")
-        except: pass
-
-    def on_row_select(self, event):
-        selection = self.table.focus()
-        if not selection: return
-        item = self.table.item(selection, "values")
-        self.selected_registration_id = item[0]
-        
-        with db_connect() as conn:
-            with conn.cursor(dictionary=True) as cur:
-                cur.execute("""SELECT * FROM registrations WHERE registration_id=%s""", (item[0],))
-                r = cur.fetchone()
-                if r:
-                    self.rfid_var.set(r['rfid'])
-                    self.fetcher_name_var.set(r['fetcher_name'])
-                    self.fetcher_code_var.set(r['fetcher_code'])
-                    self.student_id_var.set(r['student_id'])
-                    self.student_name_var.set(r['student_name'])
-                    self.grade_var.set(r['grade'])
-                    self.teacher_var.set(r['teacher'])
-                    self.fetcher_address_var.set(r['address'])
-                    self.fetcher_contact_var.set(r['contact'])
-                    self.paired_rfid_var.set(r['paired_rfid'])
-                    self.student_rfid_var.set(r['student_rfid'])
-                    self.update_student_count(r['fetcher_name'])
-
-    def load_data(self):
-        self.table.delete(*self.table.get_children())
-        offset = (self.current_page - 1) * self.page_size
-        with db_connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT COUNT(*) FROM registrations")
-                self.total_records = cur.fetchone()[0]
-            # Added status to the SELECT query
-                cur.execute("""SELECT registration_id, fetcher_name, student_name, rfid, student_rfid, status 
-                           FROM registrations ORDER BY registration_id DESC LIMIT %s OFFSET %s""", (self.page_size, offset))
-            
-                for row in cur.fetchall():
-                # Apply the tag based on the status string (row[5])
-                    self.table.insert("", "end", values=row, tags=(row[5],)) 
-                
-        total_p = max(1, (self.total_records + self.page_size - 1) // self.page_size)
-        self.page_lbl.config(text=f"Page {self.current_page} of {total_p}")
-
-    def lock_ui(self):
-        for e in self.fetcher_entries + self.student_entries: e.config(state="disabled")
-        self.is_edit_mode = False
-
-    def unlock_ui(self):
-        for e in self.fetcher_entries + self.student_entries:
-            prop = str(e.cget("textvariable")).lower()
-            e.config(state="readonly" if "rfid" in prop else "normal")
-
-    def reset_load(self):
-        self.add_btn.config(text="NEW PAIRING", bg="#4CAF50", state="normal")
-        self.edit_btn.config(text="EDIT RECORD", bg="#2196F3", state="normal")
-        self.delete_btn.config(text="DELETE", bg="#F44336")
-        self.lock_ui(); self.clear_all(); self.load_data()
-
-    def clear_all(self):
-        vars_to_clear = [
-            self.rfid_var, self.fetcher_name_var, self.fetcher_code_var, self.fetcher_address_var, self.fetcher_contact_var, 
-            self.paired_rfid_var, self.student_rfid_var, self.student_id_var, 
-            self.student_name_var, self.grade_var, self.teacher_var,
-            self.guardian_name_var, self.guardian_contact_var, 
-        ]
-        for v in vars_to_clear: v.set("")
-        self.count_var.set("Linked Students: 0")
-        self.fetcher_photo_lbl.config(image="", text="No Fetcher\nPhoto")
-        self.student_photo_lbl.config(image="", text="No Student\nPhoto")
-        self.status_var.set("Ready")
-
-    def toggle_add(self):
-        if self.add_btn["text"] == "NEW PAIRING":
-            self.clear_all(); self.unlock_ui(); self.add_btn.config(text="SAVE PAIR")
-            self.delete_btn.config(text="CANCEL"); self.edit_btn.config(state="disabled")
-        else: self.save_record()
-
-    def toggle_edit(self):
-        if not self.selected_registration_id: return
-        self.is_edit_mode = True; self.unlock_ui(); self.edit_btn.config(text="UPDATE")
-        self.add_btn.config(state="disabled"); self.delete_btn.config(text="CANCEL")
-
-    def delete_record(self):
-        if self.delete_btn["text"] == "CANCEL": self.reset_load(); return
-        if self.selected_registration_id and messagebox.askyesno("Confirm", "Delete this record?"):
-            with db_connect() as conn:
-                with conn.cursor() as cur:
-                    cur.execute("DELETE FROM registrations WHERE registration_id=%s", (self.selected_registration_id,))
-                    conn.commit()
-            self.reset_load()
-
-    def search_records(self):
-        q = f"%{self.search_var.get()}%"
-        self.table.delete(*self.table.get_children())
-        try:
-            with db_connect() as conn:
-                with conn.cursor() as cur:
-                    # Added 'status' to match the table's expected columns
-                    cur.execute("""SELECT registration_id, fetcher_name, student_name, rfid, student_rfid, status 
-                                   FROM registrations 
-                                   WHERE fetcher_name LIKE %s OR student_name LIKE %s""", (q, q))
-                    for row in cur.fetchall():
-                        self.table.insert("", "end", values=row, tags=(row[5],))
-        except Exception as e:
-            print(f"Search Error: {e}")
-
-    def next_page(self):
-        if self.current_page * self.page_size < self.total_records: self.current_page += 1; self.load_data()
-
-    def prev_page(self):
-        if self.current_page > 1: self.current_page -= 1; self.load_data()
-
-    def on_close(self):
-        if self.ser and self.ser.is_open: self.ser.close()
-        self.controller.destroy()
-
-    def clear_subfields(self, record_type="student", status="NO PHOTO"):
-        if record_type == "student":
-            vars_to_clear = [self.student_name_var, self.grade_var, self.guardian_name_var, self.guardian_contact_var, self.teacher_var]
-            lbl = self.student_photo_lbl
-        else:
-            vars_to_clear = [self.fetcher_name_var, self.fetcher_contact_var, self.fetcher_address_var]
-            lbl = self.fetcher_photo_lbl
-        for var in vars_to_clear: var.set("")
-        lbl.config(image="", text=status)
-        
-    def start_listening(self):
-        """Ensures the serial connection is active when the frame is shown."""
-        if not self.ser or not self.ser.is_open:
-            self.start_serial_thread()
-        print("Serial listening started.")
-
-    def stop_listening(self):
-        """Safely closes the serial port when switching away from this frame."""
-        if self.ser and self.ser.is_open:
-            try:
-                self.ser.close()
-                self.ser = None # Reset to None so it can be restarted
-                print("Serial port released.")
-            except Exception as e:
-                print(f"Error closing serial: {e}")
-                
-    def toggle_status(self):
-        if not self.selected_registration_id:
-            return messagebox.showwarning("Warning", "Please select a record from the table first.")
-
-    # Get current status from table
-        selection = self.table.focus()
-        current_values = self.table.item(selection, "values")
-        current_status = current_values[5] # index 5 is the status column
-
-        new_status = "Inactive" if current_status == "Active" else "Active"
-        confirm_msg = f"Mark ID as {new_status}?"
-    
-        if messagebox.askyesno("Confirm Status Change", confirm_msg):
-            try:
-                with db_connect() as conn:
-                    with conn.cursor() as cur:
-                    # Update database
-                        cur.execute("UPDATE registrations SET status=%s WHERE registration_id=%s", 
-                                (new_status, self.selected_registration_id))
-                        conn.commit()
-            
-                messagebox.showinfo("Updated", f"Record is now {new_status}")
-                self.load_data() # Refresh table
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to update status: {e}")
+        except: 
+            pass

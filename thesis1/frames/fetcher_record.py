@@ -302,9 +302,11 @@ class FetcherRecord(tk.Frame):
         if self.add_btn["text"] == "ADD":
             self.reset_ui_state()
             self.set_fields_state("normal")
+            
             self.add_btn.config(text="SAVE", bg="#2E7D32")
             self.edit_btn.config(state="disabled")
             self.delete_btn.config(text="CANCEL", bg="#757575")
+            self.edit_label.config(text="ADD MODE", fg="white", bg="green")
             self.fetcher_code_var.set(self.generate_short_code())
             return
 

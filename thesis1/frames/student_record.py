@@ -283,13 +283,13 @@ class StudentRecord(tk.Frame):
             self.display_photo(self.photo_path)
 
     def add_student(self):
-    # Transition to 'Adding' state
+    
         if self.add_btn["text"] == "ADD":
             self.clear_fields() # Clear any previous selection
             self.set_fields_state("normal")
             self.student_id_entry.config(state="normal")
         
-        # UI Feedback
+       
             self.add_btn.config(text="SAVE", bg="#2E7D32")
             self.edit_btn.config(state="disabled")
             self.delete_btn.config(text="CANCEL", bg="#757575")
@@ -332,37 +332,86 @@ class StudentRecord(tk.Frame):
             messagebox.showerror("Database Error", f"Could not save: {str(e)}")
 
     def enable_edit_mode(self):
-        if not self.student_id_var.get(): return messagebox.showwarning("Warning", "Select a student")
-        self.edit_mode = True; self.original_student_id = self.student_id_var.get()
-        self.set_fields_state("normal"); self.student_id_entry.config(state="normal")
-        self.update_btn.config(state="normal"); self.edit_label.config(text="EDIT MODE", bg="red", fg="white")
+        if not self.student_id_var.get(): 
+            return messagebox.showwarning("Warning", "Please select a student from the table first.")
+        
+        self.edit_mode = True
+        self.original_student_id = self.student_id_var.get()
+        
+        # UI Transitions
+        self.set_fields_state("normal")
+        self.student_id_entry.config(state="normal")
+        self.update_btn.config(state="normal")
+        self.edit_btn.config(state="disabled")
+        
+        # Change DELETE button to CANCEL
+        self.delete_btn.config(text="CANCEL", bg="#757575")
+        self.edit_label.config(text="EDIT MODE", bg="red", fg="white")
 
     def edit_student(self):
+        # This check is just a safety net
+        if not self.edit_mode: 
+            return self.enable_edit_mode()
+
         error = self.validate()
-        if error: return messagebox.showerror("Error", error)
+        if error: 
+            return messagebox.showerror("Error", error)
         
+        # Check if the new Student ID already exists (if it was changed)
+        new_sid = self.student_id_var.get()
+        if new_sid != self.original_student_id and self.student_id_exists(new_sid):
+            return messagebox.showerror("Error", f"Student ID {new_sid} is already taken.")
+
+        # Photo Processing logic...
         binary_photo = self.photo_path if isinstance(self.photo_path, bytes) else None
         if self.photo_path and isinstance(self.photo_path, str):
-            img = Image.open(self.photo_path).convert("RGB")
-            buf = io.BytesIO(); img.save(buf, format='JPEG')
-            binary_photo = buf.getvalue()
+            try:
+                img = Image.open(self.photo_path).convert("RGB")
+                buf = io.BytesIO()
+                img.save(buf, format='JPEG')
+                binary_photo = buf.getvalue()
+            except Exception as e:
+                return messagebox.showerror("Image Error", f"Failed to process image: {e}")
 
-        with db_connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute("UPDATE student SET Student_name=%s, grade_lvl=%s, Guardian_name=%s, Guardian_contact=%s,, Student_id=%s, photo_path=%s WHERE Student_id=%s",
-                            (self.student_name_var.get(), self.grade_var.get(), self.guardian_name_var.get(), self.guardian_contact_var.get(), self.student_id_var.get(), binary_photo, self.original_student_id))
-                conn.commit()
-        self.reset_ui_state(); self.load_data()
-
-    def delete_student(self):
-        if self.delete_btn["text"] == "CANCEL": self.reset_ui_state(); return
-        sid = self.student_id_var.get()
-        if sid and messagebox.askyesno("Confirm", "Delete?"):
+        try:
             with db_connect() as conn:
                 with conn.cursor() as cur:
-                    cur.execute("DELETE FROM student WHERE Student_id=%s", (sid,))
+                    # Note: Removed the extra comma in your SQL query below
+                    cur.execute("""UPDATE student SET Student_name=%s, grade_lvl=%s, 
+                                   Guardian_name=%s, Guardian_contact=%s, Student_id=%s, 
+                                   photo_path=%s WHERE Student_id=%s""",
+                                (self.student_name_var.get(), self.grade_var.get(), 
+                                 self.guardian_name_var.get(), self.guardian_contact_var.get(), 
+                                 new_sid, binary_photo, self.original_student_id))
                     conn.commit()
-            self.reset_ui_state(); self.load_data()
+            messagebox.showinfo("Success", "Record updated!")
+            self.reset_ui_state()
+            self.load_data()
+        except Exception as e:
+            messagebox.showerror("Database Error", f"Update failed: {e}")
+
+    def delete_student(self):
+        # If in ADD or EDIT mode, this button acts as CANCEL
+        if self.delete_btn["text"] == "CANCEL": 
+            self.reset_ui_state()
+            return
+        
+        # If in VIEW mode, check if a student is selected
+        sid = self.student_id_var.get()
+        if not sid:
+            return messagebox.showwarning("Warning", "Please select a student to delete.")
+
+        if messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete Student ID: {sid}?"):
+            try:
+                with db_connect() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("DELETE FROM student WHERE Student_id=%s", (sid,))
+                        conn.commit()
+                messagebox.showinfo("Deleted", "Student record removed.")
+                self.reset_ui_state()
+                self.load_data()
+            except Exception as e:
+                messagebox.showerror("Error", f"Delete failed: {e}")
 
     def validate(self):
         name = self.student_name_var.get().strip()

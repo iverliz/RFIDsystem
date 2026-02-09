@@ -327,3 +327,36 @@ class ClassroomFrame(tk.Frame):
 
     def notify_teacher(self, student_name, time_out):
         messagebox.showinfo("Student Fetched", f"🔔 {student_name} picked up!\nTime: {time_out}")
+     
+    def verify_pickup_with_override(self, student_id, scanned_uid):
+   
+        try:
+            with db_connect() as conn:
+                with conn.cursor() as cur:
+                # 1. Check if it's the normal Fetcher/Parent
+                    cur.execute("SELECT Student_name FROM student WHERE Student_id = %s AND fetcher_code = %s", 
+                            (student_id, scanned_uid))
+                    res = cur.fetchone()
+                    if res:
+                        return {"status": "SUCCESS", "name": res[0], "type": "Parent"}
+
+                # 2. Check if it's the Teacher's Master RFID (Override)
+                    cur.execute("""
+                        SELECT s.Student_name, u.username 
+                        FROM student s
+                        JOIN classroom c ON s.Student_id = c.student_id
+                        JOIN teacher_rfid_registration tr ON c.teacher_name = (
+                            SELECT username FROM users WHERE employee_id = tr.employee_id
+                        )
+                        JOIN users u ON tr.employee_id = u.employee_id
+                        WHERE s.Student_id = %s AND tr.rfid_uid = %s
+                    """, (student_id, scanned_uid))
+                
+                    res = cur.fetchone()
+                    if res:
+                        return {"status": "OVERRIDE", "name": res[0], "teacher": res[1]}
+
+                    return {"status": "DENIED", "name": None}
+        except Exception as e:
+            print("Auth Error:", e)
+            return {"status": "ERROR", "name": None}    
