@@ -4,6 +4,7 @@ from PIL import Image, ImageTk
 import io
 import os
 import sys
+import datetime
 
 # Ensure utility imports work
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -164,6 +165,7 @@ class ClassroomFrame(tk.Frame):
     def setup_profile_panel(self):
         tk.Label(self.right_col, text="STUDENT PROFILE", font=("Arial", 11, "bold"), bg="white", fg="#0047AB").pack(pady=15)
 
+        
         self.photo_label = tk.Label(self.right_col, text="No Image", bg="#E1E8EE", width=25, height=10, relief="solid", bd=1)
         self.photo_label.pack(pady=10, padx=20)
 
@@ -255,19 +257,28 @@ class ClassroomFrame(tk.Frame):
             messagebox.showerror("Error", str(e))
 
     def refresh_tables(self):
+        
         self.student_table.delete(*self.student_table.get_children())
         self.remove_btn.config(state="disabled")
         try:
             with db_connect() as conn:
                 with conn.cursor() as cur:
+                   # Change from 'id' to '*' or the specific ID column you created
+                    cur.execute("SELECT * FROM teacher_rfid_registration WHERE employee_id = (SELECT employee_id FROM users WHERE username=%s) AND status = 'Active'", (self.real_teacher_name,))
+                    has_rfid = "✅ YES" if cur.fetchone() else "❌ NO"
+
                     cur.execute("""
                         SELECT s.ID, s.Student_id, s.Student_name, s.fetcher_code
                         FROM student s
                         INNER JOIN classroom c ON s.Student_id = c.student_id
                         WHERE c.teacher_name = %s
                     """, (self.real_teacher_name,))
+                    
                     for row in cur.fetchall():
-                        self.student_table.insert("", "end", values=row)
+                        # We add the RFID status to the row so teacher knows they can override
+                        display_row = list(row) + [has_rfid]
+                        self.student_table.insert("", "end", values=display_row)
+                        
         except Exception as e:
             print("Refresh Error:", e)
 
@@ -314,15 +325,19 @@ class ClassroomFrame(tk.Frame):
         try:
             with db_connect() as conn:
                 with conn.cursor() as cur:
-                    cur.execute("SELECT id, student_name, time_out FROM history_log WHERE teacher = %s ORDER BY id DESC LIMIT 1", (self.real_teacher_name,))
+                # Use time_out instead of id to find the latest log if 'id' is missing
+                    cur.execute("SELECT student_name, time_out FROM history_log WHERE teacher = %s ORDER BY time_out DESC LIMIT 1", (self.real_teacher_name,))
                     new_log = cur.fetchone()
                     if new_log:
-                        log_id, s_name, t_out = new_log
-                        if self.last_log_id is not None and log_id > self.last_log_id:
-                            self.notify_teacher(s_name, t_out)
-                            self.refresh_tables()
-                        self.last_log_id = log_id
-        except: pass
+                        s_name, t_out = new_log
+                    # Use the timestamp to check for newness instead of log_id
+                        if self.last_log_id != str(t_out):
+                            if self.last_log_id is not None:
+                                self.notify_teacher(s_name, t_out)
+                                self.refresh_tables()
+                            self.last_log_id = str(t_out)
+        except Exception as e:
+            print(f"Background Update Error: {e}")
         self.after(5000, self.check_for_updates)
 
     def notify_teacher(self, student_name, time_out):
@@ -359,4 +374,39 @@ class ClassroomFrame(tk.Frame):
                     return {"status": "DENIED", "name": None}
         except Exception as e:
             print("Auth Error:", e)
-            return {"status": "ERROR", "name": None}    
+            return {"status": "ERROR", "name": None}
+        
+    def save_fetch_log(self, student_data, auth_result):
+        try:
+            with db_connect() as conn:
+                with conn.cursor() as cur:
+                # Determine who is the 'Fetcher'
+                    if auth_result["status"] == "OVERRIDE":
+                    # Mark as override in the logs for accountability
+                        fetcher_display = f"OVERRIDE: {auth_result['teacher']}"
+                    else:
+                        fetcher_display = auth_result.get("name", "Authorized Fetcher")
+
+                    query = """
+                    INSERT INTO history_log 
+                    (fetcher_name, student_name, student_id, grade, teacher, location, time_out) 
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """
+                
+                # Get current timestamp
+                    now = datetime.now()
+                
+                    cur.execute(query, (
+                        fetcher_display,
+                        student_data['Student_name'],
+                    student_data['Student_id'],
+                    student_data.get('grade', 'N/A'),
+                    self.real_teacher_name, # The student's assigned classroom teacher
+                    "Classroom Dashboard",
+                    now
+                    ))
+                    conn.commit()
+                    print(f"Log saved: {student_data['Student_name']} fetched by {fetcher_display}")
+                
+        except Exception as e:
+            print("Logging Error:", e)

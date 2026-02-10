@@ -122,11 +122,20 @@ class RfidRegistration(tk.Frame):
 
         search_row = tk.Frame(table_main_container, bg="#f0f0f0")
         search_row.pack(fill="x", padx=5, pady=5)
-        tk.Label(search_row, text="Search:", bg="#f0f0f0", font=("Arial", 10, "bold")).pack(side="left", padx=5)
-        tk.Entry(search_row, textvariable=self.search_var, font=("Arial", 11)).pack(side="left", padx=5)
-        tk.Button(search_row, text="🔍", command=self.search_records).pack(side="left")
+        
+        tk.Label(search_row, text="Search Name:", bg="#f0f0f0", font=("Arial", 10, "bold")).pack(side="left", padx=5)
+        tk.Entry(search_row, textvariable=self.search_var, font=("Arial", 11), width=15).pack(side="left", padx=5)
+
+        # Added Grade Filter Dropdown
+        tk.Label(search_row, text="Grade:", bg="#f0f0f0", font=("Arial", 10, "bold")).pack(side="left", padx=5)
+        self.grade_filter_var = tk.StringVar(value="All")
+        self.grade_filter_combo = ttk.Combobox(search_row, textvariable=self.grade_filter_var, 
+                                               values=["All", "K1", "K2", "1", "2", "3", "4", "5", "6"], 
+                                               width=5, state="readonly")
+        self.grade_filter_combo.pack(side="left", padx=5)
+
+        tk.Button(search_row, text="🔍", command=self.search_records).pack(side="left", padx=5)
         tk.Button(search_row, text="Reset", command=self.reset_load).pack(side="left", padx=5)
-        tk.Label(search_row, textvariable=self.count_var, font=("Arial", 10, "bold"), bg="#f0f0f0", fg="green").pack(side="right", padx=10)
 
         cols = ("id", "f_name", "s_name", "f_rfid", "s_rfid" , "status")
         self.table = ttk.Treeview(table_main_container, columns=cols, show="headings", height=10)
@@ -223,48 +232,55 @@ class RfidRegistration(tk.Frame):
             messagebox.showerror("Database Error", str(e))
             
     def autofill_record(self, record_type):
+    # 1. Get the ID from the correct variable
         search_id = self.student_id_var.get().strip() if record_type == "student" else self.fetcher_code_var.get().strip()
+    
+    # 2. If the field is empty, clear the UI and stop
         if not search_id: 
             return self.clear_subfields(record_type)
 
+    # 3. INITIALIZE data as None so the 'if data:' check doesn't crash
+        data = None 
+
         query = "SELECT * FROM student WHERE Student_id=%s" if record_type == "student" else "SELECT * FROM fetcher WHERE fetcher_code=%s"
+    
         try:
             with db_connect() as conn:
                 with conn.cursor(dictionary=True) as cur:
                     cur.execute(query, (search_id,))
                     data = cur.fetchone()
-                    
-                    # Identify which label we are updating
+                
+                # Identify which photo box to update
                     lbl = self.student_photo_lbl if record_type == "student" else self.fetcher_photo_lbl
-                    
+                
                     if data:
+                    # 4. Success! Now we can safely use 'data'
                         if record_type == "student":
                             self.student_name_var.set(data.get("Student_name", ""))
-                            self.grade_var.set(data.get("grade_lvl", ""))
+                            self.grade_var.set(data.get("grade_lvl", "")) # Moved here where data exists
                             self.teacher_var.set(data.get("Teacher_name", ""))
                         else:
                             self.fetcher_name_var.set(data.get("Fetcher_name", ""))
                             self.fetcher_contact_var.set(data.get("contact", ""))
-                        
-                        # --- PHOTO LOGIC ---
-                        blob = data.get("photo_path") # This is the LONGBLOB from master table
+                    
+                    # --- PHOTO LOGIC ---
+                        blob = data.get("photo_path")
                         if blob:
-                            # Store the raw bytes directly on the label object for save_record to use
                             lbl.image_bytes = blob 
-                            
-                            # Convert bytes to a viewable image in Tkinter
                             img = Image.open(io.BytesIO(blob)).resize((110, 110))
                             photo = ImageTk.PhotoImage(img)
                             lbl.config(image=photo, text="")
-                            lbl.image = photo # Keep reference to prevent garbage collection
+                            lbl.image = photo 
                         else:
                             lbl.image_bytes = None
                             lbl.config(image="", text="No Photo")
                     else:
+                    # 5. ID was typed but not found in Database
                         lbl.image_bytes = None
                         self.clear_subfields(record_type, "NOT FOUND")
-                        
+                    
         except Exception as e:
+        # This catches DB connection errors or SQL syntax errors
             print(f"Autofill error: {e}")
 
     def find_owner_by_rfid(self, rfid_uid, target_type):
@@ -292,7 +308,14 @@ class RfidRegistration(tk.Frame):
         entries = []
         for i, (label, var) in enumerate(fields):
             tk.Label(frame, text=label, bg="white").grid(row=i, column=0, sticky="w")
-            ent = tk.Entry(frame, textvariable=var, font=("Arial", 11), width=22)
+            
+            # Check if this is the Grade field to use a Spinbox
+            if "Grade" in label:
+                ent = ttk.Spinbox(frame, values=["K1", "K2", "1", "2", "3", "4", "5", "6"], 
+                                  textvariable=var, font=("Arial", 11), width=20, state="readonly")
+            else:
+                ent = tk.Entry(frame, textvariable=var, font=("Arial", 11), width=22)
+                
             ent.grid(row=i, column=1, pady=2, padx=5)
             entries.append(ent)
         return entries
@@ -451,12 +474,29 @@ class RfidRegistration(tk.Frame):
             messagebox.showerror("Error", f"Failed to toggle status: {e}")
 
     def search_records(self):
-        q = f"%{self.search_var.get()}%"
+        name_query = f"%{self.search_var.get()}%"
+        grade_filter = self.grade_filter_var.get()
+        
         self.table.delete(*self.table.get_children())
-        with db_connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT registration_id, fetcher_name, student_name, rfid, student_rfid, status FROM registrations WHERE fetcher_name LIKE %s OR student_name LIKE %s", (q, q))
-                for row in cur.fetchall(): self.table.insert("", "end", values=row)
+        
+        query = "SELECT registration_id, fetcher_name, student_name, rfid, student_rfid, status FROM registrations WHERE (fetcher_name LIKE %s OR student_name LIKE %s)"
+        params = [name_query, name_query]
+
+        # If a specific grade is selected, add it to the SQL query
+        if grade_filter != "All":
+            query += " AND grade = %s"
+            params.append(grade_filter)
+
+        try:
+            with db_connect() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(query, tuple(params))
+                    results = cur.fetchall()
+                    for row in results:
+                        self.table.insert("", "end", values=row)
+                    self.count_var.set(f"Found: {len(results)}")
+        except Exception as e:
+            print(f"Search Error: {e}")
                 
     def update_student_count(self, name):
         try:

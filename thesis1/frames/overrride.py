@@ -90,7 +90,6 @@ class OverrideFrame(tk.Frame):
     # --- KEY FIXES ---
 
     def handle_rfid_tap(self, uid):
-        """Force the entry to update even if it was previously locked."""
         # 1. Unlock temporarily
         self.rfid_entry.config(state="normal") 
         

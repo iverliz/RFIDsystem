@@ -60,7 +60,6 @@ class StudentRecord(tk.Frame):
         self.guardian_name_var = tk.StringVar()
         self.guardian_contact_var = tk.StringVar()
         
-        
         self.guardian_contact_var.trace_add("write", self.format_contact)
 
         self.edit_mode = False
@@ -77,7 +76,6 @@ class StudentRecord(tk.Frame):
             ("Student ID:", self.student_id_var),
             ("Guardian Name:", self.guardian_name_var),
             ("Guardian Contact:", self.guardian_contact_var),
-
         ]
 
         self.entries = {}
@@ -86,7 +84,9 @@ class StudentRecord(tk.Frame):
             tk.Label(self.left_box, text=label, bg="white", font=("Arial", 11)).place(x=20, y=y_start + i * 40)
 
             if label == "Grade:":
-                entry = ttk.Spinbox(self.left_box, from_=1, to=6, textvariable=var, width=28, state="readonly")
+                grade_options = ["K1", "K2", "1", "2", "3", "4", "5", "6"]
+                entry = ttk.Spinbox(self.left_box, values=grade_options, textvariable=var, 
+                                    width=28, state="readonly")
             elif label == "Student ID:":
                 entry = tk.Entry(self.left_box, textvariable=var, width=30, font=("Arial", 11),
                                  validate="key", validatecommand=(self.num_validate, "%P"))
@@ -120,7 +120,7 @@ class StudentRecord(tk.Frame):
                                     font=("Arial", 9, "bold"), command=self.delete_student)
         self.delete_btn.grid(row=0, column=3, padx=2)
 
-        # ================= RIGHT PANEL (SEARCH & TABLE) =================
+        # ================= RIGHT PANEL =================
         self.right_panel = tk.Frame(self, width=540, height=520, bg="white", bd=2, relief="groove")
         self.right_panel.place(x=520, y=90)
         self.right_panel.pack_propagate(False)
@@ -213,30 +213,36 @@ class StudentRecord(tk.Frame):
     def load_data(self):
         self.student_table.delete(*self.student_table.get_children())
         offset = (self.current_page - 1) * self.page_size
-        with db_connect() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT COUNT(*) FROM student")
-                self.total_students = cursor.fetchone()[0]
-                cursor.execute("SELECT Student_id, Student_name, grade_lvl FROM student LIMIT %s OFFSET %s", (self.page_size, offset))
-                for row in cursor.fetchall(): self.student_table.insert("", "end", values=row)
-        total_p = max(1, (self.total_students + self.page_size - 1) // self.page_size)
-        self.count_var.set(f"Students: {self.total_students} | Page {self.current_page}/{total_p}")
+        try:
+            with db_connect() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT COUNT(*) FROM student")
+                    self.total_students = cursor.fetchone()[0]
+                    cursor.execute("SELECT Student_id, Student_name, grade_lvl FROM student LIMIT %s OFFSET %s", (self.page_size, offset))
+                    for row in cursor.fetchall(): self.student_table.insert("", "end", values=row)
+            total_p = max(1, (self.total_students + self.page_size - 1) // self.page_size)
+            self.count_var.set(f"Students: {self.total_students} | Page {self.current_page}/{total_p}")
+        except Exception as e:
+            print(f"Load error: {e}")
 
     def search_student(self):
         keyword = self.search_var.get().strip()
         if not keyword: return self.clear_search()
-        with db_connect() as conn:
-            with conn.cursor() as cursor:
-                query = "SELECT Student_id, Student_name, grade_lvl FROM student WHERE Student_name LIKE %s OR Student_id LIKE %s"
-                cursor.execute(query, (f"%{keyword}%", f"%{keyword}%"))
-                self.search_results = cursor.fetchall()
-        
-        if not self.search_results:
-            messagebox.showinfo("Search", "No results found.")
-            return self.clear_search()
-        
-        self.search_page = 1
-        self.update_search_table()
+        try:
+            with db_connect() as conn:
+                with conn.cursor() as cursor:
+                    query = "SELECT Student_id, Student_name, grade_lvl FROM student WHERE Student_name LIKE %s OR Student_id LIKE %s"
+                    cursor.execute(query, (f"%{keyword}%", f"%{keyword}%"))
+                    self.search_results = cursor.fetchall()
+            
+            if not self.search_results:
+                messagebox.showinfo("Search", "No results found.")
+                return self.clear_search()
+            
+            self.search_page = 1
+            self.update_search_table()
+        except Exception as e:
+            print(f"Search error: {e}")
 
     def update_search_table(self):
         self.student_table.delete(*self.student_table.get_children())
@@ -252,51 +258,57 @@ class StudentRecord(tk.Frame):
         self.current_page = 1
         self.load_data()
         self.clear_fields()
-        self.edit_label.config(text="VIEW MODE", fg="gray", bg="white")
 
     def next_page(self):
         if self.search_results:
-            if self.search_page * self.page_size < len(self.search_results): self.search_page += 1; self.update_search_table()
-        elif self.current_page * self.page_size < self.total_students: self.current_page += 1; self.load_data()
+            if self.search_page * self.page_size < len(self.search_results): 
+                self.search_page += 1
+                self.update_search_table()
+        elif self.current_page * self.page_size < self.total_students: 
+            self.current_page += 1
+            self.load_data()
 
     def prev_page(self):
         if self.search_results:
-            if self.search_page > 1: self.search_page -= 1; self.update_search_table()
-        elif self.current_page > 1: self.current_page -= 1; self.load_data()
+            if self.search_page > 1: 
+                self.search_page -= 1
+                self.update_search_table()
+        elif self.current_page > 1: 
+            self.current_page -= 1
+            self.load_data()
 
     def on_table_select(self, _):
         if self.edit_mode or self.add_btn["text"] == "SAVE": return
         sel = self.student_table.selection()
         if not sel: return
         sid = self.student_table.item(sel[0], "values")[0]
-        with db_connect() as conn:
-            with conn.cursor(dictionary=True) as cursor:
-                cursor.execute("SELECT * FROM student WHERE Student_id=%s", (sid,))
-                student = cursor.fetchone()
-        if student:
-            self.student_id_var.set(student["Student_id"])
-            self.student_name_var.set(student["Student_name"])
-            self.grade_var.set(student["grade_lvl"])
-            self.guardian_name_var.set(student["Guardian_name"])
-            self.guardian_contact_var.set(student["Guardian_contact"])
-            self.photo_path = student["photo_path"]
-            self.display_photo(self.photo_path)
+        try:
+            with db_connect() as conn:
+                with conn.cursor(dictionary=True) as cursor:
+                    cursor.execute("SELECT * FROM student WHERE Student_id=%s", (sid,))
+                    student = cursor.fetchone()
+            if student:
+                self.student_id_var.set(student["Student_id"])
+                self.student_name_var.set(student["Student_name"])
+                self.grade_var.set(student["grade_lvl"])
+                self.guardian_name_var.set(student["Guardian_name"])
+                self.guardian_contact_var.set(student["Guardian_contact"])
+                self.photo_path = student["photo_path"]
+                self.display_photo(self.photo_path)
+        except Exception as e:
+            print(f"Select error: {e}")
 
     def add_student(self):
-    
         if self.add_btn["text"] == "ADD":
-            self.clear_fields() # Clear any previous selection
+            self.clear_fields()
             self.set_fields_state("normal")
             self.student_id_entry.config(state="normal")
-        
-       
             self.add_btn.config(text="SAVE", bg="#2E7D32")
             self.edit_btn.config(state="disabled")
             self.delete_btn.config(text="CANCEL", bg="#757575")
             self.edit_label.config(text="ADD MODE", fg="white", bg="#4CAF50")
             return
 
-    # Logical Validation and Saving
         error = self.validate()
         if error: 
             return messagebox.showerror("Validation Error", error)
@@ -305,7 +317,6 @@ class StudentRecord(tk.Frame):
         if self.student_id_exists(sid): 
             return messagebox.showerror("Error", f"Student ID {sid} already exists.")
 
-    # Photo Processing
         binary_photo = None
         if self.photo_path and isinstance(self.photo_path, str):
             img = Image.open(self.photo_path).convert("RGB")
@@ -313,7 +324,6 @@ class StudentRecord(tk.Frame):
             img.save(buf, format='JPEG')
             binary_photo = buf.getvalue()
 
-    # Database Execution
         try:
             with db_connect() as conn:
                 with conn.cursor() as cur:
@@ -333,50 +343,34 @@ class StudentRecord(tk.Frame):
 
     def enable_edit_mode(self):
         if not self.student_id_var.get(): 
-            return messagebox.showwarning("Warning", "Please select a student from the table first.")
-        
+            return messagebox.showwarning("Warning", "Please select a student first.")
         self.edit_mode = True
         self.original_student_id = self.student_id_var.get()
-        
-        # UI Transitions
         self.set_fields_state("normal")
         self.student_id_entry.config(state="normal")
         self.update_btn.config(state="normal")
         self.edit_btn.config(state="disabled")
-        
-        # Change DELETE button to CANCEL
         self.delete_btn.config(text="CANCEL", bg="#757575")
         self.edit_label.config(text="EDIT MODE", bg="red", fg="white")
 
     def edit_student(self):
-        # This check is just a safety net
-        if not self.edit_mode: 
-            return self.enable_edit_mode()
-
         error = self.validate()
-        if error: 
-            return messagebox.showerror("Error", error)
+        if error: return messagebox.showerror("Error", error)
         
-        # Check if the new Student ID already exists (if it was changed)
         new_sid = self.student_id_var.get()
         if new_sid != self.original_student_id and self.student_id_exists(new_sid):
-            return messagebox.showerror("Error", f"Student ID {new_sid} is already taken.")
+            return messagebox.showerror("Error", f"Student ID {new_sid} is taken.")
 
-        # Photo Processing logic...
         binary_photo = self.photo_path if isinstance(self.photo_path, bytes) else None
         if self.photo_path and isinstance(self.photo_path, str):
-            try:
-                img = Image.open(self.photo_path).convert("RGB")
-                buf = io.BytesIO()
-                img.save(buf, format='JPEG')
-                binary_photo = buf.getvalue()
-            except Exception as e:
-                return messagebox.showerror("Image Error", f"Failed to process image: {e}")
+            img = Image.open(self.photo_path).convert("RGB")
+            buf = io.BytesIO()
+            img.save(buf, format='JPEG')
+            binary_photo = buf.getvalue()
 
         try:
             with db_connect() as conn:
                 with conn.cursor() as cur:
-                    # Note: Removed the extra comma in your SQL query below
                     cur.execute("""UPDATE student SET Student_name=%s, grade_lvl=%s, 
                                    Guardian_name=%s, Guardian_contact=%s, Student_id=%s, 
                                    photo_path=%s WHERE Student_id=%s""",
@@ -391,23 +385,20 @@ class StudentRecord(tk.Frame):
             messagebox.showerror("Database Error", f"Update failed: {e}")
 
     def delete_student(self):
-        # If in ADD or EDIT mode, this button acts as CANCEL
         if self.delete_btn["text"] == "CANCEL": 
             self.reset_ui_state()
             return
         
-        # If in VIEW mode, check if a student is selected
         sid = self.student_id_var.get()
-        if not sid:
-            return messagebox.showwarning("Warning", "Please select a student to delete.")
+        if not sid: return messagebox.showwarning("Warning", "Select a student.")
 
-        if messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete Student ID: {sid}?"):
+        if messagebox.askyesno("Confirm", f"Delete Student ID: {sid}?"):
             try:
                 with db_connect() as conn:
                     with conn.cursor() as cur:
                         cur.execute("DELETE FROM student WHERE Student_id=%s", (sid,))
                         conn.commit()
-                messagebox.showinfo("Deleted", "Student record removed.")
+                messagebox.showinfo("Deleted", "Record removed.")
                 self.reset_ui_state()
                 self.load_data()
             except Exception as e:
@@ -417,25 +408,16 @@ class StudentRecord(tk.Frame):
         name = self.student_name_var.get().strip()
         sid = self.student_id_var.get().strip()
         grade = self.grade_var.get().strip()
-
-        if not name: 
-            return " Name is required."
-        if not sid.isdigit(): 
-            return "Student ID must be numeric."
-    
-    # Strictly enforce Grade 6 limit
-        try:
-            if not grade or int(grade) > 6 or int(grade) < 1:
-                return "Grade must be between 1 and 6."
-        except ValueError:
-            return "Invalid Grade format."
-
+        if not name: return "Name is required."
+        if not sid.isdigit(): return "Student ID must be numeric."
+        if grade not in ["K1", "K2", "1", "2", "3", "4", "5", "6"]:
+            return "Please select a valid Grade (K1, K2, or 1-6)."
         return None
 
     def student_id_exists(self, sid):
-        with db_connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT Student_id FROM student WHERE Student_id=%s", (sid,))
-                return cur.fetchone() is not None
-            
-    
+        try:
+            with db_connect() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT Student_id FROM student WHERE Student_id=%s", (sid,))
+                    return cur.fetchone() is not None
+        except: return False
