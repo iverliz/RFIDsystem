@@ -222,76 +222,133 @@ class RFIDTapping(QMainWindow):
     def process_rfid(self, uid):
         self.db.ping(reconnect=True)
         uid = str(uid).strip()
-        print(f"DEBUG: Processing Scanned UID: [{uid}]")
 
-        # 1. IDENTIFY THE CARD TYPE
-        # Is it a Student?
-        self.cursor.execute("SELECT * FROM registrations WHERE student_rfid=%s AND status='Active'", (uid,))
+    
+
+    # Student
+        self.cursor.execute(
+        "SELECT * FROM registrations WHERE student_rfid=%s AND status='Active'",
+        (uid,)
+    )
         student_data = self.cursor.fetchone()
 
-        # Is it a Fetcher?
-        self.cursor.execute("SELECT * FROM registrations WHERE rfid=%s AND status='Active'", (uid,))
+    # Fetcher
+        self.cursor.execute(
+        "SELECT * FROM registrations WHERE rfid=%s AND status='Active'",
+        (uid,)
+    )
         fetcher_links = self.cursor.fetchall()
 
-        # Is it a Master Teacher?
+    # Master Teacher
         master_query = """
-            SELECT u.username AS Teacher_name FROM users u 
-            JOIN teacher_rfid_registration tr ON u.employee_id = tr.employee_id 
-            WHERE tr.rfid_uid = %s AND tr.status = 'Active' AND u.role = 'Teacher'
-        """
+        SELECT u.username AS teacher_name
+        FROM users u
+        JOIN teacher_rfid_registration tr 
+            ON u.employee_id = tr.employee_id
+        WHERE tr.rfid_uid = %s 
+        AND tr.status = 'Active'
+        AND u.role = 'Teacher'
+    """
         self.cursor.execute(master_query, (uid,))
         master_teacher = self.cursor.fetchone()
 
-        # 2. DECIDE ACTION BASED ON STATE
+    # ================= LOGIC FLOW =================
 
-        # A. If it's a MASTER TEACHER
+    # ---------------------------------------------------
+    # A. MASTER TEACHER
+    # ---------------------------------------------------
         if master_teacher:
-            master_teacher['photo_path'] = None 
-            self.start_fetcher_session(master_teacher, is_master=True)
-            return
+            if self.temp_student:
+                self.active_teacher = master_teacher
+                self.is_master_active = True
+                self.session_active = True
 
-        # B. If it's a STUDENT
-        if student_data:
-            if self.is_already_fetched(student_data['student_name']):
-                self.trigger_alarm("ALREADY FETCHED TODAY")
-                return
-
-            # If a session is already active (Fetcher or Master tapped first)
-            if self.session_active:
-                self.handle_student_tap(student_data)
+                self.handle_student_tap(self.temp_student)
+                self.temp_student = None
             else:
-                # Student tapped first! Store them and wait for Fetcher
-                self.temp_student = student_data 
-                self.student_panel.name.setText(self.mask_name(student_data['student_name']))
-                self.student_panel.info.setText(f"Grade: {student_data['grade']}")
-                self.display_photo(self.student_panel.image, student_data.get('photo_path'))
-                
-                self.status.setText("STUDENT IDENTIFIED\nWAITING FOR FETCHER...")
-                self.status.setStyleSheet("background: #047857; color: white; padding: 20px;")
-                self.snd_auth.play()
-                self.reset_timer.start(15000) # Give 15 seconds to find the parent
+                self.start_fetcher_session(master_teacher, is_master=True)
             return
 
-        # C. If it's a FETCHER
+    # ---------------------------------------------------
+    # B. FETCHER
+    # ---------------------------------------------------
         if fetcher_links:
-            # If a student already tapped, check if this fetcher is linked to them
-            if hasattr(self, 'temp_student') and self.temp_student:
-                is_linked = any(link['student_rfid'] == self.temp_student['student_rfid'] for link in fetcher_links)
+        # Student tapped first → verify linkage
+            if self.temp_student:
+                student_rfid = self.temp_student.get("student_rfid")
+
+                is_linked = any(
+                    link.get("student_rfid") == student_rfid
+                    for link in fetcher_links
+            )
+
                 if is_linked:
-                    # MATCH FOUND!
                     self.active_fetcher = fetcher_links[0]
-                    self.fetcher_panel.name.setText(self.mask_name(self.active_fetcher['fetcher_name']))
-                    self.display_photo(self.fetcher_panel.image, self.active_fetcher.get('photo_path'))
+                    self.pending_students = fetcher_links
+                    self.session_active = True
+
+                    self.fetcher_panel.name.setText(
+                        self.mask_name(self.active_fetcher.get("fetcher_name", ""))
+                )
+                    self.display_photo(
+                        self.fetcher_panel.image,
+                    self.active_fetcher.get("photo_path")
+                )   
+
                     self.handle_student_tap(self.temp_student)
-                    self.temp_student = None # Clear the temporary hold
+                    self.temp_student = None
                 else:
                     self.trigger_alarm("FETCHER NOT LINKED TO THIS STUDENT")
             else:
-                # Fetcher tapped first! Start standard session
+            # Fetcher-first mode
                 self.start_fetcher_session(fetcher_links, is_master=False)
             return
 
-        # D. UNAUTHORIZED CARD
+    # ---------------------------------------------------
+    # C. STUDENT
+    # ---------------------------------------------------
+        if student_data:
+            if self.is_already_fetched(student_data.get("student_name")):
+                self.trigger_alarm("ALREADY FETCHED TODAY")
+                return
+
+        # Session already active (Fetcher/Teacher tapped first)
+            if self.session_active:
+                self.handle_student_tap(student_data)
+            else:
+            # Student-first mode
+                self.reset_all()
+
+                self.session_active = True
+                self.temp_student = student_data
+
+                self.student_panel.name.setText(
+                self.mask_name(student_data.get("student_name", ""))
+            )
+                self.student_panel.info.setText(
+                    f"Grade: {student_data.get('grade', '')}"
+            )
+
+                self.display_photo(
+                    self.student_panel.image,
+                    student_data.get("photo_path")
+            )
+
+                self.status.setText("STUDENT SCANNED\nTAP AUTHORIZER...")
+                self.status.setStyleSheet(
+                    "background: #047857; color: white; padding: 20px;"
+            )
+
+                self.snd_auth.play()
+                self.reset_timer.start(4000)  # 3–4 seconds timeout
+            return
+
+    # ---------------------------------------------------
+    # D. NO MATCH
+    # ---------------------------------------------------
+        self.trigger_alarm("UNAUTHORIZED CARD")
+
+        
     def start_fetcher_session(self, data, is_master=False):
         self.reset_all() # Clear previous state
         self.session_active = True
@@ -299,7 +356,8 @@ class RFIDTapping(QMainWindow):
         if is_master:
             self.is_master_active = True
             self.active_teacher = data
-            self.fetcher_panel.name.setText(f"T. {self.mask_name(data['Teacher_name'])}")
+            self.fetcher_panel.name.setText(
+            f"T. {self.mask_name(data.get('teacher_name', ''))}")
             self.fetcher_panel.info.setText("⭐ MASTER OVERRIDE ACTIVE")
             self.display_photo(self.fetcher_panel.image, data.get('photo_path'))
             self.status.setText("MASTER VERIFIED\nSCAN ANY STUDENT")
@@ -318,10 +376,22 @@ class RFIDTapping(QMainWindow):
         self.reset_timer.start(10000)
 
     def handle_student_tap(self, student_reg):
-        # 1. Check if student belongs to this fetcher (skip check if master override)
+        # --- 1. VALIDATION LOGIC ---
         is_sibling = any(s['student_rfid'] == student_reg['student_rfid'] for s in self.pending_students)
         
-        if self.is_master_active or is_sibling:
+        # New Teacher-Student Class Validation
+        is_teacher_match = False
+        if self.is_master_active and self.active_teacher:
+            # Check if the student's assigned teacher matches the currently tapped master teacher
+            if student_reg['teacher'] == self.active_teacher['Teacher_name']:
+                is_teacher_match = True
+            else:
+                # Trigger specific error for wrong teacher
+                self.trigger_alarm(f"NOT YOUR STUDENT!\nCLASS OF T. {student_reg['teacher']}")
+                return # Stop processing immediately
+
+        # Proceed only if it's a valid sibling OR a teacher scanning their own student
+        if is_teacher_match or is_sibling:
             if self.is_already_fetched(student_reg['student_name']):
                 self.status.setText("ALREADY FETCHED TODAY")
                 self.snd_denied.play()
@@ -351,7 +421,9 @@ class RFIDTapping(QMainWindow):
                     self.fetcher_panel.info.setText(f"Waiting for: {len(self.pending_students)} more")
             else:
                 self.status.setText("MASTER LOGGED SUCCESS")
+                self.status.setStyleSheet("background: #0047AB; color: white; padding: 20px;")
         else:
+            # This covers the case for a regular Fetcher scanning the wrong child
             self.status.setText("WRONG STUDENT FOR THIS FETCHER")
             self.status.setStyleSheet("background: #dc2626; color: white; padding: 20px;")
             self.snd_denied.play()
@@ -440,9 +512,10 @@ class RFIDTapping(QMainWindow):
         try:
             # 1. Determine who is doing the fetching (Teacher or Fetcher)
             if self.is_master_active and self.active_teacher:
-                issuer = f"[OVERRIDE] {self.active_teacher['Teacher_name']}"
+                # Identify that this was a Teacher dismissing their own student
+                issuer = f"[TEACHER OVERRIDE] {self.active_teacher['Teacher_name']}"
             else:
-                # Use the raw name from the database dictionary
+                # Use the raw name from the database dictionary for regular fetchers
                 issuer = reg.get('fetcher_name', 'Unknown')
 
             # 2. Prepare the SQL query
@@ -452,10 +525,10 @@ class RFIDTapping(QMainWindow):
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
             """
 
-            # 3. Execute with RAW data (not masked UI text)
+            # 3. Execute with RAW data
             self.cursor.execute(query, (
                 issuer, 
-                reg['student_name'],           # Raw student name
+                reg['student_name'], 
                 reg.get('student_id', 'N/A'), 
                 reg['grade'], 
                 reg['teacher'], 
@@ -464,6 +537,7 @@ class RFIDTapping(QMainWindow):
             ))
             
             self.db.commit()
+            print(f"LOG SAVED: {reg['student_name']} by {issuer}")
             
         except Exception as e: 
             print(f"Logging Error: {e}")

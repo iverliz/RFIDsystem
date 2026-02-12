@@ -3,7 +3,8 @@ from tkinter import messagebox
 import serial
 import threading
 import serial.tools.list_ports
-from frames.login import LoginFrame, SignUpFrame, ForgotPasswordFrame
+
+from frames.login import LoginFrame
 from frames.main_dashboard import MainDashboard
 from frames.student_record import StudentRecord
 from frames.teacher_record import TeacherRecord
@@ -14,6 +15,10 @@ from frames.report import Report
 from frames.account import Account
 from frames.Classroom import ClassroomFrame
 from frames.overrride import OverrideFrame
+from frames.signup import SignUpFrame
+from frames.forgot_password import ForgotPasswordFrame
+
+
 
 class Rfid(tk.Tk):
     def __init__(self):

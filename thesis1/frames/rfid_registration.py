@@ -22,6 +22,7 @@ class RfidRegistration(tk.Frame):
         self.page_size = 15
         self.current_page = 1
         self.total_records = 0
+        self.mode = "view"   # view | add | edit
 
         # Define Variables
         self.rfid_var = tk.StringVar()
@@ -34,8 +35,8 @@ class RfidRegistration(tk.Frame):
         self.student_rfid_var = tk.StringVar() 
         self.student_id_var = tk.StringVar()
         self.student_name_var = tk.StringVar()
-        self.guardian_name_var = tk.StringVar() 
-        self.guardian_contact_var = tk.StringVar()
+        self.Guardian_name_var = tk.StringVar() 
+        self.Guardian_contact_var = tk.StringVar()
         self.grade_var = tk.StringVar()        
         self.teacher_var = tk.StringVar()
         self.search_var = tk.StringVar()
@@ -82,8 +83,8 @@ class RfidRegistration(tk.Frame):
             ("Student ID", self.student_id_var),
             ("Name", self.student_name_var),
             ("Grade/Section", self.grade_var),
-            ("Guardian Name", self.guardian_name_var),
-            ("Guardian Contact", self.guardian_contact_var),
+            ("Guardian Name", self.Guardian_name_var),
+            ("Guardian Contact", self.Guardian_contact_var),
             ("Adviser", self.teacher_var)
         ], 1)
 
@@ -99,6 +100,10 @@ class RfidRegistration(tk.Frame):
 
         btn_row = tk.Frame(action_frame, bg="#b2e5ed")
         btn_row.pack(pady=5)
+        
+        self.ban_btn = tk.Button(btn_row, text="BAN FETCHER", bg="#000000", fg="white", 
+                                font=("Arial", 10, "bold"), width=15, command=self.global_deactivate_fetcher)
+        self.ban_btn.pack(side="left", padx=5)
 
         self.add_btn = tk.Button(btn_row, text="NEW PAIRING", bg="#4CAF50", fg="white", 
                                 font=("Arial", 10, "bold"), width=15, command=self.toggle_add)
@@ -149,7 +154,7 @@ class RfidRegistration(tk.Frame):
 
     def handle_rfid_scan(self, uid): 
         """Called by main.py whenever a tag is read"""
-        if not self.is_edit_mode and self.add_btn["text"] != "SAVE PAIR":
+        if self.mode not in ("add", "edit"):
             return 
 
         if not self.rfid_var.get():
@@ -166,6 +171,9 @@ class RfidRegistration(tk.Frame):
             self.find_owner_by_rfid(uid, "student")
 
     def save_record(self):
+        if self.is_edit_mode and not self.selected_registration_id:
+            messagebox.showerror("Error", "No record selected for update.")
+            return
         f_rfid = self.rfid_var.get().strip()
         s_rfid = self.student_rfid_var.get().strip()
         f_code = self.fetcher_code_var.get().strip()
@@ -218,6 +226,8 @@ class RfidRegistration(tk.Frame):
                     conn.commit()
 
             messagebox.showinfo("Success", "Record Saved Successfully!")
+            self.mode = "view"
+            self.reset_load()
             
             # Sibling Linking Logic
             if messagebox.askyesno("Link Sibling", f"Link another student to {f_name}?"):
@@ -254,14 +264,17 @@ class RfidRegistration(tk.Frame):
                     lbl = self.student_photo_lbl if record_type == "student" else self.fetcher_photo_lbl
                 
                     if data:
-                    # 4. Success! Now we can safely use 'data'
+                    # 4. ID was found in Database
                         if record_type == "student":
                             self.student_name_var.set(data.get("Student_name", ""))
-                            self.grade_var.set(data.get("grade_lvl", "")) # Moved here where data exists
-                            self.teacher_var.set(data.get("Teacher_name", ""))
+                            self.grade_var.set(data.get("grade_lvl", "")) 
+                            self.Guardian_name_var.set(data.get("Guardian_name", ""))
+                            self.Guardian_contact_var.set(data.get("Guardian_contact", ""))
+                            
                         else:
-                            self.fetcher_name_var.set(data.get("Fetcher_name", ""))
+                            self.fetcher_name_var.set(data.get("fetcher_name", ""))
                             self.fetcher_contact_var.set(data.get("contact", ""))
+                            self.fetcher_address_var.set(data.get("Address",""))
                     
                     # --- PHOTO LOGIC ---
                         blob = data.get("photo_path")
@@ -328,13 +341,16 @@ class RfidRegistration(tk.Frame):
         return lbl
 
     def reset_load(self):
+        self.mode = "view"
         self.clear_all()
         self.lock_ui()
-        self.is_edit_mode = False
         self.selected_registration_id = None
+
         self.add_btn.config(text="NEW PAIRING", state="normal")
-        self.edit_btn.config(text="EDIT RECORD", state="normal")
+        self.edit_btn.config(text="EDIT RECORD", bg="#2196F3", state="normal")
         self.delete_btn.config(text="DELETE")
+
+        self.status_var.set("System Ready")
         self.load_data()
 
     def lock_ui(self):
@@ -346,7 +362,7 @@ class RfidRegistration(tk.Frame):
             e.config(state="readonly" if "rfid" in var_name else "normal")
 
     def toggle_add(self):
-        if self.add_btn["text"] == "NEW PAIRING":
+        if self.mode != "add":
             self.clear_all(); self.unlock_ui()
             self.add_btn.config(text="SAVE PAIR")
             self.delete_btn.config(text="CANCEL")
@@ -356,23 +372,25 @@ class RfidRegistration(tk.Frame):
 
     def toggle_edit(self):
         if not self.selected_registration_id:
-            messagebox.showwarning("Warning", "Please select a record from the table first!")
+            messagebox.showwarning("Warning", "Please select a record first!")
             return
-        
-        # Change state to Edit Mode
-        self.is_edit_mode = True
-        self.unlock_ui()
-        
-        # Update Button UI
-        self.edit_btn.config(text="UPDATE", bg="#FF9800") # Change color to orange for visibility
-        self.add_btn.config(state="disabled")
-        self.delete_btn.config(text="CANCEL")
-        self.status_var.set("EDIT MODE: Modify fields and click UPDATE")
+
+        if self.mode != "edit":
+            self.mode = "edit"
+            self.unlock_ui()
+
+            self.edit_btn.config(text="UPDATE", bg="#FF9800")
+            self.add_btn.config(state="disabled")
+            self.delete_btn.config(text="CANCEL")
+
+            self.status_var.set("EDIT MODE: Modify fields then click UPDATE")
+        else:
+            self.save_record()
 
     def clear_all(self):
         for var in [self.rfid_var, self.student_rfid_var, self.fetcher_code_var, self.student_id_var, 
                     self.fetcher_name_var, self.student_name_var, self.grade_var, self.teacher_var,
-                    self.fetcher_address_var, self.fetcher_contact_var, self.paired_rfid_var]:
+                    self.fetcher_address_var, self.fetcher_contact_var, self.paired_rfid_var, self.Guardian_name_var, self.Guardian_contact_var]:
             var.set("")
         self.fetcher_photo_lbl.config(image="", text="No Photo")
         self.student_photo_lbl.config(image="", text="No Photo")
@@ -383,13 +401,22 @@ class RfidRegistration(tk.Frame):
 
     def load_data(self):
         self.table.delete(*self.table.get_children())
+        
+        # Configure colors for the tags
+        self.table.tag_configure('active_row', background='#eaffea') # Soft Green
+        self.table.tag_configure('inactive_row', background='#ffecec', foreground='#a00000') # Soft Red
+
         try:
             with db_connect() as conn:
                 with conn.cursor() as cur:
                     cur.execute("SELECT registration_id, fetcher_name, student_name, rfid, student_rfid, status FROM registrations")
                     for row in cur.fetchall():
-                        self.table.insert("", "end", values=row)
-        except Exception as e: print(f"Load Error: {e}")
+                        status = row[5]
+                        # Apply tag based on status
+                        tag = 'active_row' if status == "Active" else 'inactive_row'
+                        self.table.insert("", "end", values=row, tags=(tag,))
+        except Exception as e: 
+            print(f"Load Error: {e}")
 
     def on_row_select(self, event):
         selection = self.table.focus()
@@ -437,13 +464,25 @@ class RfidRegistration(tk.Frame):
             print(f"Error selecting row: {e}")
 
     def delete_record(self):
-        if self.delete_btn["text"] == "CANCEL": return self.reset_load()
-        if not self.selected_registration_id: return
+    # If we are in ADD or EDIT mode → CANCEL
+        if self.mode in ("add", "edit"):
+            messagebox.showinfo("Cancel", "Operation cancelled.")
+            self.reset_load()
+            return
+
+    # Normal delete
+        if not self.selected_registration_id:
+            return
+
         if messagebox.askyesno("Confirm", "Delete record?"):
             with db_connect() as conn:
                 with conn.cursor() as cur:
-                    cur.execute("DELETE FROM registrations WHERE registration_id=%s", (self.selected_registration_id,))
+                    cur.execute(
+                    "DELETE FROM registrations WHERE registration_id=%s",
+                    (self.selected_registration_id,)
+                )
                     conn.commit()
+
             self.reset_load()
 
     def toggle_status(self):
@@ -507,3 +546,46 @@ class RfidRegistration(tk.Frame):
                     self.count_var.set(f"Linked Students: {count_res['total']}")
         except: 
             pass
+        
+    def global_deactivate_fetcher(self):
+        f_code = self.fetcher_code_var.get().strip()
+        f_name = self.fetcher_name_var.get().strip()
+
+        if not f_code:
+            messagebox.showwarning("Selection Required", "Please select a record from the table first.")
+            return
+
+        confirm = messagebox.askyesno("GLOBAL DEACTIVATION", 
+            f"WARNING: This will deactivate ALL student pairings for {f_name}.\n\n"
+            "This fetcher will be denied access for all linked students. Proceed?")
+
+        if confirm:
+            try:
+                with db_connect() as conn:
+                    with conn.cursor() as cur:
+                        # This SQL updates every row belonging to this fetcher
+                        sql = "UPDATE registrations SET status = 'Inactive' WHERE fetcher_code = %s"
+                        cur.execute(sql, (f_code,))
+                        affected = cur.rowcount
+                        conn.commit()
+
+                self.status_var.set(f"🔴 FETCHER BANNED: {affected} pairings deactivated.")
+                messagebox.showinfo("Success", f"Fetcher {f_name} and all {affected} links are now Inactive.")
+                self.load_data() # Refresh colors
+                
+            except Exception as e:
+                messagebox.showerror("Database Error", f"Could not ban fetcher: {e}")
+                
+    def toggle_add(self):
+        if self.mode != "add":
+            self.mode = "add"
+            self.clear_all()
+            self.unlock_ui()
+
+            self.add_btn.config(text="SAVE PAIR")
+            self.edit_btn.config(state="disabled")
+            self.delete_btn.config(text="CANCEL")
+
+            self.status_var.set("ADD MODE: Scan Fetcher RFID")
+        else:
+            self.save_record()

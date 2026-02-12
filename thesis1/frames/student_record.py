@@ -125,7 +125,7 @@ class StudentRecord(tk.Frame):
         self.right_panel.place(x=520, y=90)
         self.right_panel.pack_propagate(False)
 
-        tk.Label(self.right_panel, text="Search Student", font=("Arial", 14, "bold"), bg="white").place(x=20, y=15)
+        tk.Label(self.right_panel, text="Search Student (Name or  Student ID )", font=("Arial", 14, "bold"), bg="white").place(x=20, y=15)
 
         self.search_var = tk.StringVar()
         tk.Entry(self.right_panel, textvariable=self.search_var, width=25, font=("Arial", 11)).place(x=20, y=50)
@@ -227,7 +227,9 @@ class StudentRecord(tk.Frame):
 
     def search_student(self):
         keyword = self.search_var.get().strip()
-        if not keyword: return self.clear_search()
+        if not keyword: 
+            messagebox.showinfo("Search", "Please enter a keyword.") 
+            return self.clear_search()
         try:
             with db_connect() as conn:
                 with conn.cursor() as cursor:
@@ -264,18 +266,22 @@ class StudentRecord(tk.Frame):
             if self.search_page * self.page_size < len(self.search_results): 
                 self.search_page += 1
                 self.update_search_table()
-        elif self.current_page * self.page_size < self.total_students: 
-            self.current_page += 1
-            self.load_data()
+        else:
+            # Check if there is a next page based on total_students
+            total_p = (self.total_students + self.page_size - 1) // self.page_size
+            if self.current_page < total_p: 
+                self.current_page += 1
+                self.load_data()
 
     def prev_page(self):
         if self.search_results:
             if self.search_page > 1: 
                 self.search_page -= 1
                 self.update_search_table()
-        elif self.current_page > 1: 
-            self.current_page -= 1
-            self.load_data()
+        else:
+            if self.current_page > 1: 
+                self.current_page -= 1
+                self.load_data()
 
     def on_table_select(self, _):
         if self.edit_mode or self.add_btn["text"] == "SAVE": return
@@ -392,13 +398,24 @@ class StudentRecord(tk.Frame):
         sid = self.student_id_var.get()
         if not sid: return messagebox.showwarning("Warning", "Select a student.")
 
-        if messagebox.askyesno("Confirm", f"Delete Student ID: {sid}?"):
+        if messagebox.askyesno("Confirm", f"Delete Student ID: {sid}?\nThis will also remove them from all Classrooms."):
             try:
                 with db_connect() as conn:
                     with conn.cursor() as cur:
+                        # NEW APPROACH: Delete from classroom first to satisfy constraints
+                        cur.execute("DELETE FROM classroom WHERE student_id=%s", (sid,))
+                        
+                        # Then delete from main student record
                         cur.execute("DELETE FROM student WHERE Student_id=%s", (sid,))
+                        
                         conn.commit()
-                messagebox.showinfo("Deleted", "Record removed.")
+                
+                messagebox.showinfo("Success", "Student removed from Records and Classrooms.")
+                
+                # IMPORTANT: If we deleted the last student on a page, go back one page
+                if len(self.student_table.get_children()) <= 1 and self.current_page > 1:
+                    self.current_page -= 1
+                    
                 self.reset_ui_state()
                 self.load_data()
             except Exception as e:
