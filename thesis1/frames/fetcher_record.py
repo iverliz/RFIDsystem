@@ -299,22 +299,25 @@ class FetcherRecord(tk.Frame):
 
     # ================= CRUD OPERATIONS =================
     def add_fetcher(self):
+    # ENTER ADD MODE
         if self.add_btn["text"] == "ADD":
             self.reset_ui_state()
             self.set_fields_state("normal")
-            
+
+            generated_code = self.generate_short_code()
+            self.fetcher_code_var.set(generated_code)
+
             self.add_btn.config(text="SAVE", bg="#2E7D32")
             self.edit_btn.config(state="disabled")
             self.delete_btn.config(text="CANCEL", bg="#757575")
             self.edit_label.config(text="ADD MODE", fg="white", bg="green")
-            self.fetcher_code_var.set(self.generate_short_code())
             return
 
+    # SAVE MODE
         if not all([self.fetcher_name_var.get().strip(), self.address_var.get().strip()]):
             return messagebox.showerror("Error", "Name and Address are required")
 
         try:
-            new_code = self.generate_short_code()
             binary_photo = None
             if self.photo_path:
                 img = Image.open(self.photo_path).convert("RGB")
@@ -324,25 +327,35 @@ class FetcherRecord(tk.Frame):
 
             with db_connect() as conn:
                 with conn.cursor() as cursor:
-                    query = "INSERT INTO fetcher (fetcher_code, Fetcher_name, Address, contact, photo_path) VALUES (%s,%s,%s,%s,%s)"
+                    query = """
+                    INSERT INTO fetcher 
+                    (fetcher_code, Fetcher_name, Address, contact, photo_path) 
+                    VALUES (%s,%s,%s,%s,%s)
+                """
                     cursor.execute(query, (
-                        new_code,
-                        self.fetcher_name_var.get().strip(), 
-                        self.address_var.get().strip(), 
-                        self.contact_var.get().strip(), 
+                        self.fetcher_code_var.get(),  # ✅ USE GENERATED VALUE
+                        self.fetcher_name_var.get().strip(),
+                        self.address_var.get().strip(),
+                        self.contact_var.get().strip(),
                         binary_photo
                     ))
                     conn.commit()
-        
-            messagebox.showinfo("Success", f"Fetcher added successfully!\nGenerated Code: {new_code}")
+
+            messagebox.showinfo("Success", f"Fetcher added!: {self.fetcher_name_var.get().strip()}")
             self.reset_ui_state()
             self.load_data()
+
         except Exception as e:
             messagebox.showerror("Error", f"Failed to add: {e}")
             
     def enable_edit_mode(self):
         if not self.current_fetcher_id:
             return messagebox.showwarning("Warning", "Select a fetcher from the table first.")
+        else:
+            ask = messagebox.askyesno("Confirm", "Are you sure you want to edit this fetcher?")
+            if not ask:
+                return
+            
         self.edit_mode = True
         self.set_fields_state("normal")
         self.add_btn.config(state="disabled")
@@ -422,10 +435,24 @@ class FetcherRecord(tk.Frame):
         try:
             with db_connect() as conn:
                 with conn.cursor() as cursor:
-                    cursor.execute("SELECT MAX(ID) FROM fetcher")
-                    last_id = cursor.fetchone()[0]
-                    next_number = 1 if last_id is None else last_id + 1
+                    cursor.execute("""
+                    SELECT fetcher_code 
+                    FROM fetcher 
+                    WHERE fetcher_code LIKE 'FC_%'
+                    ORDER BY fetcher_code DESC 
+                    LIMIT 1
+                    """)
+                    result = cursor.fetchone()
+
+                    if result:
+                        last_code = result[0]   # Example: FC_0007
+                        number = int(last_code.split("_")[1])
+                        next_number = number + 1
+                    else:
+                        next_number = 1
+
                     return f"FC_{next_number:04d}"
+
         except Exception as e:
-            print(f"Error generating code: {e}")
-            return "FC_XXXX"
+            messagebox.showerror("Error", f"Generated code error: {e}")
+            return "FC_0001"

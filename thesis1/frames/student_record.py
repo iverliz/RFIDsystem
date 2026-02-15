@@ -155,7 +155,7 @@ class StudentRecord(tk.Frame):
         self.load_data()
 
     # ================= LOGIC METHODS =================
-    def display_photo(self, data):
+    def _display_photo(self, data):
         try:
             if data:
                 stream = io.BytesIO(data) if isinstance(data, bytes) else open(data, 'rb')
@@ -350,6 +350,10 @@ class StudentRecord(tk.Frame):
     def enable_edit_mode(self):
         if not self.student_id_var.get(): 
             return messagebox.showwarning("Warning", "Please select a student first.")
+        else: 
+            ask= messagebox.askyesno("Confirm", "Are you sure you want to edit this student?")
+            if not ask: 
+                return
         self.edit_mode = True
         self.original_student_id = self.student_id_var.get()
         self.set_fields_state("normal")

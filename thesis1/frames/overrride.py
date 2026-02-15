@@ -89,21 +89,59 @@ class OverrideFrame(tk.Frame):
 
     # --- KEY FIXES ---
 
-    def handle_rfid_tap(self, uid):
-        # 1. Unlock temporarily
-        self.rfid_entry.config(state="normal") 
-        
-        # 2. Update value
-        self.rfid_entry.delete(0, tk.END)
-        self.rfid_entry.insert(0, uid)
-        
-        # 3. Visual feedback
-        self.rfid_entry.config(bg="#e8f5e9") 
-        self.after(500, lambda: self.rfid_entry.config(bg="white"))
-        
-        # 4. If in editing mode, keep it readonly after update to protect the ID
-        if self.editing_mode:
-            self.rfid_entry.focus_set()
+    def handle_save(self):
+        eid = self.emp_id_entry.get().strip()
+        uid = self.rfid_entry.get().strip()
+
+        if not eid or not uid:
+            messagebox.showwarning("Input Error", "ID and RFID are required.")
+            return
+
+        try:
+            with db_connect() as conn:
+                with conn.cursor() as cur:
+                    # 1. Check if Teacher exists in main users table
+                    cur.execute("SELECT username FROM users WHERE employee_id = %s AND role = 'Teacher'", (eid,))
+                    teacher_exists = cur.fetchone()
+                    
+                    if not teacher_exists:
+                        messagebox.showerror("Error", f"Employee ID {eid} is not a registered Teacher.")
+                        return
+
+                    # --- NEW: BLOCK REGISTRATION IF ALREADY EXISTS ---
+                    if not self.editing_mode: # Only check if we are creating a NEW record
+                        cur.execute("SELECT employee_id FROM teacher_rfid_registration WHERE employee_id = %s", (eid,))
+                        if cur.fetchone():
+                            messagebox.showwarning("Already Registered", 
+                                f"Teacher with ID {eid} is already registered.\nUse 'Edit' to change their RFID.")
+                            return
+
+                    # 2. Duplicate RFID check (Is this card used by someone else?)
+                    cur.execute("SELECT employee_id FROM teacher_rfid_registration WHERE rfid_uid = %s AND employee_id != %s", (uid, eid))
+                    if cur.fetchone():
+                        messagebox.showerror("Duplicate RFID", "This card is already assigned to another teacher.")
+                        return
+
+                    # 3. Save Logic
+                    if self.editing_mode:
+                        cur.execute("""
+                            UPDATE teacher_rfid_registration 
+                            SET rfid_uid = %s 
+                            WHERE employee_id = %s
+                        """, (uid, eid))
+                    else:
+                        cur.execute("""
+                            INSERT INTO teacher_rfid_registration (employee_id, rfid_uid, status) 
+                            VALUES (%s, %s, 'Active')
+                        """, (eid, uid))
+                    
+                    conn.commit()
+
+            messagebox.showinfo("Success", "Registration processed successfully.")
+            self.refresh_list()
+            self.clear_form()
+        except Exception as e:
+            messagebox.showerror("Database Error", str(e))
 
     def on_item_select(self, event):
         selected = self.tree.focus()

@@ -279,6 +279,8 @@ class TeacherRecord(tk.Frame):
     def enable_edit_mode(self):
         if not self.current_teacher_id:
             return messagebox.showwarning("Warning", "Select a teacher first")
+        else: 
+            ask = messagebox.askyesno("Confirm","Are you sure you want to edit this teacher? ")
         self.edit_mode = True
         self.set_fields_state("normal")
         self.add_btn.config(state="disabled")
@@ -291,7 +293,8 @@ class TeacherRecord(tk.Frame):
             self.reset_ui_state()
             return
         if not self.current_teacher_id: return messagebox.showwarning("Warning", "Select a teacher first")
-        if not messagebox.askyesno("Confirm", "Delete this teacher record?"): return
+        if not messagebox.askyesno("Confirm", f"Delete this teacher record: {self.teacher_name_var.get().strip()}?"):
+            return
 
         try:
             with db_connect() as conn:
