@@ -155,28 +155,38 @@ class StudentRecord(tk.Frame):
         self.load_data()
 
     # ================= LOGIC METHODS =================
-    def _display_photo(self, data):
+    def display_photo(self, data):
+        """Handles displaying photo from either a file path or database binary data."""
         try:
             if data:
-                stream = io.BytesIO(data) if isinstance(data, bytes) else open(data, 'rb')
-                img = Image.open(stream).resize((160, 160))
+                # Check if data is binary (from DB) or a file path (from Upload)
+                if isinstance(data, (bytes, bytearray)):
+                    stream = io.BytesIO(data)
+                    img = Image.open(stream)
+                else:
+                    # It's a file path string
+                    img = Image.open(data)
+                
+                img = img.resize((160, 160), Image.Resampling.LANCZOS)
                 self.photo = ImageTk.PhotoImage(img)
                 self.photo_label.config(image=self.photo, text="")
-                self.photo_label.image = self.photo
+                self.photo_label.image = self.photo # Keep reference
             else:
                 self.photo_label.config(image="", text="NO PHOTO", font=("Arial", 10, "bold"))
-        except:
-            self.photo_label.config(text="Error Image")
+        except Exception as e:
+            print(f"Photo error: {e}")
+            self.photo_label.config(image="", text="Error Image")
 
     def upload_photo(self):
         path = filedialog.askopenfilename(filetypes=[("Image Files", "*.jpg *.jpeg *.png")])
         if path:
             self.photo_path = path
-            self.display_photo(path)
+            self.display_photo(path) # Updated call
 
     def remove_photo(self):
         self.photo_path = None
-        self.display_photo(None)
+        self.display_photo(None) # Updated call
+
 
     def only_numbers(self, v): return v.isdigit() or v == ""
     def contact_limit(self, v): return (v.isdigit() and len(v) <= 11) or v == ""
@@ -299,7 +309,9 @@ class StudentRecord(tk.Frame):
                 self.grade_var.set(student["grade_lvl"])
                 self.guardian_name_var.set(student["Guardian_name"])
                 self.guardian_contact_var.set(student["Guardian_contact"])
-                self.photo_path = student["photo_path"]
+                
+                # Fetching the BLOB from the photo_path column
+                self.photo_path = student["photo_path"] 
                 self.display_photo(self.photo_path)
         except Exception as e:
             print(f"Select error: {e}")
