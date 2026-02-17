@@ -414,27 +414,26 @@ class StudentRecord(tk.Frame):
         sid = self.student_id_var.get()
         if not sid: return messagebox.showwarning("Warning", "Select a student.")
 
-        if messagebox.askyesno("Confirm", f"Delete Student ID: {sid}?\nThis will also remove them from all Classrooms."):
+        if messagebox.askyesno("Confirm", f"Delete Student ID: {sid}?\n\nNote: This student will disappear from the master list, but their name will remain in the Teacher's Class History."):
             try:
                 with db_connect() as conn:
                     with conn.cursor() as cur:
-                        # NEW APPROACH: Delete from classroom first to satisfy constraints
-                        cur.execute("DELETE FROM classroom WHERE student_id=%s", (sid,))
-                        
-                        # Then delete from main student record
+                        # WE REMOVED THE DELETE FROM CLASSROOM LINE HERE.
+                        # This allows the classroom table to keep the student's name/data.
+
+                        # Just delete from the main student record
                         cur.execute("DELETE FROM student WHERE Student_id=%s", (sid,))
-                        
                         conn.commit()
                 
-                messagebox.showinfo("Success", "Student removed from Records and Classrooms.")
+                messagebox.showinfo("Success", "Master record deleted. Classroom history preserved.")
                 
-                # IMPORTANT: If we deleted the last student on a page, go back one page
                 if len(self.student_table.get_children()) <= 1 and self.current_page > 1:
                     self.current_page -= 1
                     
                 self.reset_ui_state()
                 self.load_data()
             except Exception as e:
+                # If you get a "Foreign Key Constraint" error here, see the SQL fix below.
                 messagebox.showerror("Error", f"Delete failed: {e}")
 
     def validate(self):
