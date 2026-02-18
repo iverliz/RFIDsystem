@@ -114,8 +114,8 @@ class MainDashboard(tk.Frame):
             # 2. CRITICAL FIX: Tell the Main App (controller) that THIS is the active frame
             # This ensures dispatch_rfid sends data to the visible frame
             frame_name = frame_class.__name__
-            self.controller.current_frame_name = frame_name
-            self.controller.frames[frame_name] = self.current_frame 
+            
+            
 
             # 3. Highlight menu button
             for btn, cls in self.menu_buttons.items():

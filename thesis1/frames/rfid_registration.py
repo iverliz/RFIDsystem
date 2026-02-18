@@ -557,3 +557,25 @@ class RfidRegistration(tk.Frame):
         except Exception as e:
             print(f"Code Generation Error: {e}")
             return "FC_ERROR"
+    
+    def handle_rfid_tap(self, uid):
+        if self.mode == "view":
+            return
+
+        # Detect which field is currently focused
+        focused = self.focus_get()
+
+        if focused in self.fetcher_entries:
+            self.rfid_var.set(uid)
+            print("Fetcher RFID filled")
+
+        elif focused in self.student_entries:
+            self.student_rfid_var.set(uid)
+            print("Student RFID filled")
+
+        else:
+            # Default behavior if no specific field focused
+            if not self.rfid_var.get():
+                self.rfid_var.set(uid)
+            else:
+                self.student_rfid_var.set(uid)

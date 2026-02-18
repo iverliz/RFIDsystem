@@ -74,41 +74,42 @@ class Rfid(tk.Tk):
     
 
     def dispatch_rfid(self, uid):
-        active_frame = self.frames.get(self.current_frame_name)
-        
-        if not active_frame: 
-            print("Debug: Active frame object not found in dictionary.")
+        # Always start from MainDashboard after login
+        dashboard = self.frames.get("MainDashboard")
+
+        if dashboard and hasattr(dashboard, "current_frame") and dashboard.current_frame:
+            active_frame = dashboard.current_frame
+        else:
+            active_frame = self.frames.get(self.current_frame_name)
+
+        if not active_frame:
+            print("Debug: Active frame not found.")
             return
 
-        # Use hasattr to check if the frame is READY to receive data
         if hasattr(active_frame, "handle_rfid_tap"):
-            print(f"Success: Calling handle_rfid_tap on {self.current_frame_name}")
+            print(f"Success: Calling handle_rfid_tap on {type(active_frame).__name__}")
             active_frame.handle_rfid_tap(uid)
         elif hasattr(active_frame, "handle_rfid_scan"):
-            print(f"Success: Calling handle_rfid_scan on {self.current_frame_name}")
             active_frame.handle_rfid_scan(uid)
         else:
-            print(f"Warning: {self.current_frame_name} is active but has no RFID handler function.")
+            print(f"Warning: {type(active_frame).__name__} has no RFID handler.")
 
     # Check for the specific methods regardless of the class name
 
     def login_success(self, user_data):
         self.current_user = user_data  
-        for FrameClass in (
-            MainDashboard, StudentRecord, TeacherRecord,
-            FetcherRecord, RfidRegistration, RFIDHistory,
-            Report, Account, ClassroomFrame, OverrideFrame
-        ):
-            frame = FrameClass(self.container, self)
-            self.frames[FrameClass.__name__] = frame
-            frame.place(relwidth=1, relheight=1)
+
+        frame = MainDashboard(self.container, self)
+        self.frames["MainDashboard"] = frame
+        frame.place(relwidth=1, relheight=1)
+
         self.show_frame("MainDashboard")
         
     def start_serial_listener(self):
         def listen():
             # Auto-detect COM port
             ports = list(serial.tools.list_ports.comports())
-            target_port = next((p.device for p in ports if any(x in p.description for x in ["USB", "CH340", "Arduino"])), "COM3")
+            target_port = next((p.device for p in ports if any(x in p.description for x in ["USB", "CH340", "Arduino"])), "COM4")
             
             try:
                 self.ser = serial.Serial(target_port, 9600, timeout=0.1)
