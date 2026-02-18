@@ -142,10 +142,17 @@ class ClassroomFrame(tk.Frame):
             font=("Arial", 9, "bold"), width=16, state="disabled", command=self.remove_student_from_class
         )
         self.remove_btn.pack(pady=2)
+        
+        self.reset_btn = tk.Button(
+            btn_frame, text="RESET CLASS (NEW YEAR)", bg="#607D8B", fg="white", 
+            font=("Arial", 9, "bold"), width=16, command=self.clear_entire_class
+        )
+        self.reset_btn.pack(pady=5)
 
         tk.Label(parent, text="My Enrolled Students", font=("Arial", 12, "bold"), bg="#F0F4F8", fg="#0047AB").pack(anchor="w")
 
-        self.columns = ("ID", "Student ID", "Full Name", "Fetcher Code")
+        # Update columns to include Guardian Info
+        self.columns = ("ID", "Student ID", "Full Name", "Guardian", "Contact")
         self.student_table = self.create_table(parent, self.columns)
 
     def create_table(self, parent, cols):
@@ -219,20 +226,40 @@ class ClassroomFrame(tk.Frame):
     def add_student_to_class(self):
         sid = self.search_id_var.get().strip()
         sname = self.found_name_var.get()
+        
         if not messagebox.askyesno("Confirm", f"Add {sname} to your class?"): return
 
         try:
             with db_connect() as conn:
-                with conn.cursor() as cur:
-                    cur.execute("SELECT teacher_name FROM classroom WHERE student_id = %s", (sid,))
-                    if cur.fetchone():
-                        messagebox.showerror("Error", "Student already assigned to a teacher.")
+                with conn.cursor(dictionary=True) as cur:
+                    # 1. Fetch Name, Guardian info AND the Photo
+                    cur.execute("""SELECT Guardian_name, Guardian_contact, photo_path 
+                                   FROM student WHERE Student_id = %s""", (sid,))
+                    res = cur.fetchone()
+                    
+                    if not res:
+                        messagebox.showerror("Error", "Student record not found.")
                         return
-                    cur.execute("INSERT INTO classroom (teacher_name, student_id) VALUES (%s, %s)", (self.real_teacher_name, sid))
+
+                    # 2. Insert everything into classroom as a permanent snapshot
+                    query = """
+                        INSERT INTO classroom 
+                        (teacher_name, student_id, student_name, guardian_name, guardian_contact, student_photo) 
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                    """
+                    cur.execute(query, (
+                        self.real_teacher_name, 
+                        sid, 
+                        sname, 
+                        res['Guardian_name'], 
+                        res['Guardian_contact'],
+                        res['photo_path'] # This copies the actual image data
+                    ))
                     conn.commit()
+            
             self.search_id_var.set("")
             self.refresh_tables()
-            messagebox.showinfo("Success", f"{sname} added.")
+            messagebox.showinfo("Success", "Student added. Photo and details are now archived in your class.")
         except Exception as e:
             messagebox.showerror("Database Error", str(e))
 
@@ -257,28 +284,20 @@ class ClassroomFrame(tk.Frame):
             messagebox.showerror("Error", str(e))
 
     def refresh_tables(self):
-        
         self.student_table.delete(*self.student_table.get_children())
-        self.remove_btn.config(state="disabled")
         try:
             with db_connect() as conn:
                 with conn.cursor() as cur:
-                   # Change from 'id' to '*' or the specific ID column you created
-                    cur.execute("SELECT * FROM teacher_rfid_registration WHERE employee_id = (SELECT employee_id FROM users WHERE username=%s) AND status = 'Active'", (self.real_teacher_name,))
-                    has_rfid = "✅ YES" if cur.fetchone() else "❌ NO"
-
+                    # Pulling details directly from the classroom table's snapshot columns
                     cur.execute("""
-                        SELECT s.ID, s.Student_id, s.Student_name, s.fetcher_code
-                        FROM student s
-                        INNER JOIN classroom c ON s.Student_id = c.student_id
-                        WHERE c.teacher_name = %s
+                        SELECT id, student_id, student_name, guardian_name 
+                        FROM classroom 
+                        WHERE teacher_name = %s
                     """, (self.real_teacher_name,))
                     
                     for row in cur.fetchall():
-                        # We add the RFID status to the row so teacher knows they can override
-                        display_row = list(row) + [has_rfid]
-                        self.student_table.insert("", "end", values=display_row)
-                        
+                        # This will now show the name even if the master record is deleted
+                        self.student_table.insert("", "end", values=row)
         except Exception as e:
             print("Refresh Error:", e)
 
@@ -293,31 +312,27 @@ class ClassroomFrame(tk.Frame):
         try:
             with db_connect() as conn:
                 with conn.cursor() as cur:
-                    cur.execute("SELECT Student_name, Student_id, Guardian_name, Guardian_contact, photo_path FROM student WHERE Student_id = %s", (student_id,))
+                    # Fetching from 'classroom' instead of 'student'
+                    cur.execute("""
+                        SELECT student_name, student_id, guardian_name, guardian_contact, student_photo 
+                        FROM classroom 
+                        WHERE student_id = %s AND teacher_name = %s
+                    """, (student_id, self.real_teacher_name))
+                    
                     res = cur.fetchone()
                     if res:
                         name, sid, guard, contact, photo_blob = res
                         self.info_label.config(text=f"NAME: {name}\nID: {sid}\nGUARDIAN: {guard}\nCONTACT: {contact}")
                         
-                        # Fix Image Display
+                        # Load the photo from the classroom table binary
                         if photo_blob:
-                            try:
-                                stream = io.BytesIO(photo_blob)
-                                img = Image.open(stream)
-                                img = img.resize((180, 150), Image.Resampling.LANCZOS)
-                                self.current_photo = ImageTk.PhotoImage(img)
-                                self.photo_label.config(image=self.current_photo, text="")
-                            except:
-                                self.photo_label.config(image='', text="Image Error")
+                            stream = io.BytesIO(photo_blob)
+                            img = Image.open(stream)
+                            img = img.resize((180, 150), Image.Resampling.LANCZOS)
+                            self.current_photo = ImageTk.PhotoImage(img)
+                            self.photo_label.config(image=self.current_photo, text="")
                         else:
-                            self.photo_label.config(image='', text="No Photo")
-
-                    # Load Logs
-                    self.history_table.delete(*self.history_table.get_children())
-                    cur.execute("SELECT time_out, fetcher_name, location FROM history_log WHERE student_id = %s ORDER BY time_out DESC LIMIT 10", (student_id,))
-                    for log in cur.fetchall():
-                        ts = log[0].strftime("%m/%d %I:%M%p") if log[0] else "N/A"
-                        self.history_table.insert("", "end", values=(ts, log[1], log[2]))
+                            self.photo_label.config(image='', text="No Photo Available")
         except Exception as e:
             print("Load Details Error:", e)
 
@@ -410,3 +425,25 @@ class ClassroomFrame(tk.Frame):
                 
         except Exception as e:
             print("Logging Error:", e)
+            
+    def clear_entire_class(self):
+        # 1. First Warning
+        if not messagebox.askyesno("Confirm Reset", "Are you sure you want to remove ALL students from your class for the new school year?"):
+            return
+            
+        # 2. Final Warning (Safety First!)
+        if not messagebox.askretrycancel("Final Warning", "This action cannot be undone. Proceed?"):
+            return
+
+        try:
+            with db_connect() as conn:
+                with conn.cursor() as cur:
+                    # Deletes only the students linked to THIS teacher
+                    cur.execute("DELETE FROM classroom WHERE teacher_name = %s", (self.real_teacher_name,))
+                    conn.commit()
+            
+            self.refresh_tables()
+            self.info_label.config(text="Classroom Cleared.")
+            messagebox.showinfo("Success", "Classroom is now empty. You can begin adding new students.")
+        except Exception as e:
+            messagebox.showerror("Database Error", f"Could not reset class: {e}")
