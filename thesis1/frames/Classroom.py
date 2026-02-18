@@ -244,16 +244,12 @@ class ClassroomFrame(tk.Frame):
                     # 2. Insert everything into classroom as a permanent snapshot
                     query = """
                         INSERT INTO classroom 
-                        (teacher_name, student_id, student_name, guardian_name, guardian_contact, student_photo) 
-                        VALUES (%s, %s, %s, %s, %s, %s)
+                        (teacher_name, student_id) 
+                        VALUES (%s, %s)
                     """
                     cur.execute(query, (
-                        self.real_teacher_name, 
-                        sid, 
-                        sname, 
-                        res['Guardian_name'], 
-                        res['Guardian_contact'],
-                        res['photo_path'] # This copies the actual image data
+                        self.real_teacher_name,
+                        sid
                     ))
                     conn.commit()
             
@@ -285,19 +281,25 @@ class ClassroomFrame(tk.Frame):
 
     def refresh_tables(self):
         self.student_table.delete(*self.student_table.get_children())
+
         try:
             with db_connect() as conn:
                 with conn.cursor() as cur:
-                    # Pulling details directly from the classroom table's snapshot columns
                     cur.execute("""
-                        SELECT id, student_id, student_name, guardian_name 
-                        FROM classroom 
-                        WHERE teacher_name = %s
+                        SELECT 
+                            c.id,
+                            c.student_id,
+                            s.Student_name,
+                            s.Guardian_name,
+                            s.Guardian_contact
+                        FROM classroom c
+                        JOIN student s ON c.student_id = s.Student_id
+                        WHERE c.teacher_name = %s
                     """, (self.real_teacher_name,))
-                    
+
                     for row in cur.fetchall():
-                        # This will now show the name even if the master record is deleted
                         self.student_table.insert("", "end", values=row)
+
         except Exception as e:
             print("Refresh Error:", e)
 
@@ -311,28 +313,64 @@ class ClassroomFrame(tk.Frame):
     def load_full_student_details(self, student_id):
         try:
             with db_connect() as conn:
-                with conn.cursor() as cur:
-                    # Fetching from 'classroom' instead of 'student'
+                with conn.cursor(dictionary=True) as cur:
+
+                    # ===== GET STUDENT INFO FROM STUDENT TABLE =====
                     cur.execute("""
-                        SELECT student_name, student_id, guardian_name, guardian_contact, student_photo 
-                        FROM classroom 
-                        WHERE student_id = %s AND teacher_name = %s
-                    """, (student_id, self.real_teacher_name))
+                        SELECT Student_name, grade_lvl, photo_path
+                        FROM student
+                        WHERE Student_id = %s
+                    """, (student_id,))
+                    student = cur.fetchone()
+
+                    if not student:
+                        return
+
+                    name = student["Student_name"]
+                    grade = student["grade_lvl"]
+                    photo_blob = student["photo_path"]
+
+                    # ===== Update Profile Text =====
+                    self.info_label.config(
+                        text=f"{name}\nGrade: {grade}"
+                    )
+
+                    # ===== Display Photo =====
+                    if photo_blob:
+                        stream = io.BytesIO(photo_blob)
+                        img = Image.open(stream)
+
+                        # Keep aspect ratio, fit inside 180x180 box
+                        max_size = (180, 180)
+                        img.thumbnail(max_size, Image.Resampling.LANCZOS)
+
+                        self.current_photo = ImageTk.PhotoImage(img)
+                        self.photo_label.config(image=self.current_photo, text="")
+                    else:
+                        self.photo_label.config(image='', text="No Photo")
+
+                    # ===== LOAD RECENT FETCH LOGS =====
+                    self.history_table.delete(*self.history_table.get_children())
+
+                    cur.execute("""
+                        SELECT time_out, fetcher_name, location
+                        FROM history_log
+                        WHERE student_id = %s
+                        ORDER BY time_out DESC
+                        LIMIT 10
+                    """, (student_id,))
+
+                    logs = cur.fetchall()
+
+                    for log in logs:
+                        self.history_table.insert("", "end", values=(
+                            log["time_out"],
+                            log["fetcher_name"],
+                            log["location"]
+                        ))
+
                     
-                    res = cur.fetchone()
-                    if res:
-                        name, sid, guard, contact, photo_blob = res
-                        self.info_label.config(text=f"NAME: {name}\nID: {sid}\nGUARDIAN: {guard}\nCONTACT: {contact}")
-                        
-                        # Load the photo from the classroom table binary
-                        if photo_blob:
-                            stream = io.BytesIO(photo_blob)
-                            img = Image.open(stream)
-                            img = img.resize((180, 150), Image.Resampling.LANCZOS)
-                            self.current_photo = ImageTk.PhotoImage(img)
-                            self.photo_label.config(image=self.current_photo, text="")
-                        else:
-                            self.photo_label.config(image='', text="No Photo Available")
+
         except Exception as e:
             print("Load Details Error:", e)
 

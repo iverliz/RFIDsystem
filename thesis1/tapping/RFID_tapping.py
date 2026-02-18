@@ -423,7 +423,8 @@ class RFIDTapping(QMainWindow):
                 return
 
             student = {
-                "Student_id": uid,
+                "Student_id": student_data["student_id"],  # ✅ real student_id
+                "Student_rfid": uid,                      # keep RFID if needed
                 "Student_name": student_data["student_name"],
                 "grade_lvl": student_data["grade"],
                 "Teacher_name": student_data["teacher"],
@@ -432,9 +433,9 @@ class RFIDTapping(QMainWindow):
             }
 
             # 🔒 GLOBAL BLOCK
-            if student["Student_id"] in self.globally_fetched_students:
+            if student["Student_rfid"] in self.globally_fetched_students:
 
-                if student["Student_id"] in self.globally_fetched_students:
+                if student["Student_rfid"] in self.globally_fetched_students:
 
                     self.show_temp_status(
                         "STUDENT ALREADY FETCHED – TAP NOT ALLOWED",
@@ -641,7 +642,7 @@ class RFIDTapping(QMainWindow):
             if authorized:
                 self.sound_authorized.play()
                 self.fetched_students.add(student["Student_id"])
-                self.globally_fetched_students.add(student["Student_id"])
+                self.globally_fetched_students.add(student["Student_rfid"])
 
                 self.save_history(
                     f"TEACHER ({self.active_teacher['Teacher_name']})",
@@ -721,7 +722,7 @@ class RFIDTapping(QMainWindow):
             WHERE rfid=%s AND student_rfid=%s
         """, (
             self.active_fetcher["rfid"],
-            student["Student_id"]
+            student["Student_rfid"]   # ✅ use RFID, not student_id
         ))
 
         authorized = self.cursor.fetchone() is not None
@@ -760,7 +761,7 @@ class RFIDTapping(QMainWindow):
 
         if authorized:
             self.fetched_students.add(student["Student_id"])
-            self.globally_fetched_students.add(student["Student_id"])
+            self.globally_fetched_students.add(student["Student_rfid"])
             self.student_fetched_by[student["Student_id"]] = (
                 "FETCHER",
                 self.active_fetcher
@@ -910,7 +911,8 @@ class RFIDTapping(QMainWindow):
     # ---------------- HELPERS ----------------
     def get_students(self, rfid):
         self.cursor.execute("""
-            SELECT student_rfid AS Student_id,
+            SELECT student_id AS Student_id,
+                student_rfid AS Student_rfid,
                 student_name AS Student_name
             FROM registrations
             WHERE rfid=%s
@@ -1215,7 +1217,7 @@ class RFIDTapping(QMainWindow):
             return
 
         for s in self.fetcher_students:
-            if s["Student_id"] in self.globally_fetched_students:
+            if s["Student_rfid"] in self.globally_fetched_students:
                 self.fetched_students.add(s["Student_id"])
     
     def check_and_mark_fetcher_completed(self):
