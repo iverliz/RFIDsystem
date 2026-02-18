@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import mysql.connector
 
 from PyQt5.QtMultimedia import QSoundEffect
-from PyQt5.QtCore import QUrl
+from PyQt5.QtCore import QUrl, QByteArray
 
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt5.QtGui import QPixmap, QFont
@@ -12,12 +12,13 @@ from PyQt5.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QFrame, QSizePolicy
 )
 
+
 # ---------------- PATHS ----------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_PHOTO = os.path.join(BASE_DIR, "..", "assets", "default_photo.jfif")
 HISTORY_DIR = os.path.join(BASE_DIR, "history log")
 
-SOUND_DIR = os.path.join(BASE_DIR, "sound effect")
+SOUND_DIR = os.path.join(BASE_DIR, "soundeffect")
 
 AUTHORIZED_SOUND = os.path.join(SOUND_DIR, "authorized_sound.wav")
 DENIED_SOUND = os.path.join(SOUND_DIR, "denied_sound.wav")
@@ -100,6 +101,13 @@ class RFIDTapping(QMainWindow):
 
         # ---------------- HOLDING QUEUE ----------------
         self.holding = {}
+
+        self.holding_page_index = 0
+        self.holding_cards_per_page = 1
+
+        self.holding_pagination_timer = QTimer()
+        self.holding_pagination_timer.timeout.connect(self.rotate_holding_page)
+        self.holding_pagination_timer.start(4000)  # change page every 4 seconds
 
         # ---------------- HISTORY ----------------
         os.makedirs(HISTORY_DIR, exist_ok=True)
@@ -249,107 +257,122 @@ class RFIDTapping(QMainWindow):
         return frame
 
     # ---------------- PHOTO ----------------
-    def load_photo(self, path):
-        pix = QPixmap(path) if path and os.path.exists(path) else QPixmap()
+    def load_photo(self, image_data):
+        pix = QPixmap()
+
+        if image_data:
+            # image_data is BLOB (bytes)
+            pix.loadFromData(image_data)
+
         if pix.isNull():
             pix = QPixmap(DEFAULT_PHOTO)
+
         return pix.scaled(150, 150, Qt.KeepAspectRatio, Qt.SmoothTransformation)
 
     # ---------------- RFID ----------------
     def process_rfid(self, uid):
-        self.cursor.execute("SELECT * FROM student WHERE Student_id=%s", (uid,))
-        student = self.cursor.fetchone()
 
-        if student:
-            self.cursor.execute(
-                "SELECT rfid FROM registrations WHERE student_id=%s",
-                (student["Student_id"],)
-            )
-            row = self.cursor.fetchone()
+        # 🔍 CHECK IN REGISTRATIONS TABLE
+        self.cursor.execute("""
+            SELECT * FROM registrations
+            WHERE rfid=%s OR student_rfid=%s
+        """, (uid, uid))
 
-            if row and row["rfid"] in self.completed_fetchers:
-                self.show_temp_status(
-                    "STUDENT ALREADY FETCHED - FETCHER COMPLETED",
-                    bg="#334155",
-                    fg="white"
-                
+        rows = self.cursor.fetchall()
+
+        # -------------------------------------------------
+        # 🔵 CHECK IF RFID IS A TEACHER
+        # -------------------------------------------------
+
+        self.cursor.execute("""
+            SELECT * FROM teacher_rfid_registration
+            WHERE rfid_uid=%s
+        """, (uid,))
+
+        teacher_reg = self.cursor.fetchone()
+
+        if teacher_reg:
+
+            # 🔒 BLOCK IF TEACHER NOT ACTIVE
+            if teacher_reg.get("status") != "Active":
+
+                self.status.setText("TEACHER ACCOUNT IS INACTIVE")
+                self.status.setStyleSheet(
+                    "background:#dc2626;color:white;padding:10px;"
                 )
+
+                QTimer.singleShot(4000, self.reset_status_waiting_rfid)
                 return
-            
-        # 🔒 GLOBAL BLOCK: STUDENT ALREADY FETCHED (FETCHER OR TEACHER)
-        if student and student["Student_id"] in self.globally_fetched_students:
 
-            # Show student info again
-            self.student_panel.image.setPixmap(
-                self.load_photo(student.get("photo_path"))
-            )
-            self.student_panel.name.setText(student["Student_name"])
-            self.student_panel.info.setText(
-                f"ID: {student['Student_id']}\n"
-                f"Grade: {student['grade_lvl']}\n"
-                f"Teacher: {student['Teacher_name']}"
-            )
+            employee_id = teacher_reg.get("employee_id")
 
-            person_type, data = self.student_fetched_by.get(
-                student["Student_id"], (None, None)
-            )
+            if not employee_id:
+                return
 
-            if person_type == "TEACHER":
-                self.show_paired_by("TEACHER", data)
+            # 🔎 GET USERNAME FROM USERS TABLE
+            self.cursor.execute("""
+                SELECT username FROM users
+                WHERE employee_id=%s
+            """, (employee_id,))
 
-            elif person_type == "FETCHER":
-                self.show_fetcher_from_holding_temporarily(student["Student_id"])
+            user_row = self.cursor.fetchone()
 
-            self.status.setText("STUDENT HAS ALREADY BEEN FETCHED")
-            
+            if not user_row:
+                return
 
-            self.status.setStyleSheet(
-                "background:#f59e0b;color:black;padding:10px;"
-            )
+            username = user_row.get("username")
 
-            # ⏱ AUTO HIDE STUDENT AFTER 5 SECONDS
-            self.replay_mode = True
+            # 🔎 GET TEACHER INFO FROM TEACHER TABLE
+            self.cursor.execute("""
+                SELECT * FROM teacher
+                WHERE teacher_name=%s
+            """, (username,))
 
-            QTimer.singleShot(4000, self.end_replay_mode)
+            teacher_row = self.cursor.fetchone()
 
-            return
-        
+            if not teacher_row:
+                return
 
-        if student and self.active_fetcher is None:
-            for rfid, h in self.holding.items():
-                if student["Student_id"] in h["student_ids"]:
-                    self.student_wait_timer.stop()
-                    self.activate_fetcher_from_holding(rfid, student)
-                    return
+            # BUILD TEACHER OBJECT (COMPATIBLE WITH EXISTING LOGIC)
+            teacher = {
+                "Teacher_name": teacher_row["teacher_name"],
+                "Teacher_grade": teacher_row["teacher_grade"],
+                "photo_path": teacher_row["photo_path"]  # BLOB
+            }
 
-
-        # ---------- TEACHER RFID CHECK ----------
-               
-        self.cursor.execute(
-            "SELECT * FROM teacher WHERE rfid = %s",
-            (uid,)
-        )
-        teacher = self.cursor.fetchone()
-
-        if teacher:
             self.activate_teacher(teacher)
             return
 
+        if not rows:
+            return  # Not registered
 
+        # -------------------------------------------------
+        # IF RFID IS A FETCHER (MATCHED IN rfid COLUMN)
+        # -------------------------------------------------
+        fetcher_rows = [r for r in rows if r["rfid"] == uid]
 
-        self.cursor.execute("SELECT * FROM fetcher WHERE rfid=%s", (uid,))
-        fetcher = self.cursor.fetchone()
+        if fetcher_rows:
+            fetcher_data = fetcher_rows[0]
 
-        # 🚫 BLOCK FETCHER IF ALL STUDENTS ALREADY FETCHED (TEACHER OVERRIDE CASE)
-        if fetcher:
-            students = self.get_students(fetcher["rfid"])
+            # 🚫 BLOCK IF ALL STUDENTS ALREADY FETCHED
+            students = self.get_students(uid)
+
+            if not students:
+                self.show_temp_status(
+                    "FETCHER HAS NO ACTIVE STUDENTS",
+                    bg="#dc2626",
+                    fg="white",
+                    delay=4000
+                )
+                return
+            
             fetched_count = sum(
                 1 for s in students
                 if s["Student_id"] in self.globally_fetched_students
             )
 
             if students and fetched_count == len(students):
-                self.completed_fetchers.add(fetcher["rfid"])
+                self.completed_fetchers.add(uid)
                 self.show_temp_status(
                     "FETCHER HAS COMPLETED ALL STUDENTS",
                     bg="#334155",
@@ -357,20 +380,22 @@ class RFIDTapping(QMainWindow):
                 )
                 return
 
+            # Build fetcher object (SIMULATE OLD STRUCTURE)
+            fetcher = {
+                "rfid": uid,
+                "Fetcher_name": fetcher_data["fetcher_name"],
+                "photo_path": fetcher_data["fetcher_photo_path"]
+            }
 
-        if fetcher and fetcher["rfid"] in self.completed_fetchers:
-            self.show_temp_status(
-                "FETCHER HAS COMPLETED ALL STUDENTS",
-                bg="#334155",
-                fg="white"
-            )
-            return
+            if uid in self.completed_fetchers:
+                self.show_temp_status(
+                    "FETCHER HAS COMPLETED ALL STUDENTS",
+                    bg="#334155",
+                    fg="white"
+                )
+                return
 
-        if fetcher:
-            self.student_wait_timer.stop()
-
-            # ✅ NEW: Fetcher already in holding → no duplicate
-            if fetcher["rfid"] in self.holding and not self.active_fetcher:
+            if uid in self.holding and not self.active_fetcher:
                 self.show_temp_status(
                     "FETCHER IS ALREADY IN HOLDING QUEUE"
                 )
@@ -379,8 +404,49 @@ class RFIDTapping(QMainWindow):
             self.activate_fetcher(fetcher)
             return
 
-        if student:
+        # -------------------------------------------------
+        # IF RFID IS A STUDENT (MATCHED IN student_rfid)
+        # -------------------------------------------------
+        student_rows = [r for r in rows if r["student_rfid"] == uid]
+
+        if student_rows:
+            student_data = student_rows[0]
+
+            if student_data.get("status") != "Active":
+
+                self.status.setText("STUDENT ACCOUNT IS INACTIVE")
+                self.status.setStyleSheet(
+                    "background:#dc2626;color:white;padding:10px;"
+                )
+
+                QTimer.singleShot(4000, self.reset_status_waiting_rfid)
+                return
+
+            student = {
+                "Student_id": uid,
+                "Student_name": student_data["student_name"],
+                "grade_lvl": student_data["grade"],
+                "Teacher_name": student_data["teacher"],
+                "photo_path": student_data["photo_path"],
+                "fetcher_name": student_data["fetcher_name"]
+            }
+
+            # 🔒 GLOBAL BLOCK
+            if student["Student_id"] in self.globally_fetched_students:
+
+                if student["Student_id"] in self.globally_fetched_students:
+
+                    self.show_temp_status(
+                        "STUDENT ALREADY FETCHED – TAP NOT ALLOWED",
+                        bg="#334155",
+                        fg="white",
+                        delay=4000
+                    )
+
+                    return
+
             self.handle_student(student)
+            return
             
 
     # ---------------- STUDENT FIRST ----------------
@@ -402,9 +468,24 @@ class RFIDTapping(QMainWindow):
             return
 
         if not self.active_fetcher:
+
+            # 🔎 CHECK IF STUDENT BELONGS TO A FETCHER IN HOLDING
+            for rfid, h in self.holding.items():
+                if student["Student_id"] in h["student_ids"]:
+
+                    # Stop waiting timer if running
+                    self.student_wait_timer.stop()
+
+                    # Activate that fetcher from holding and pair
+                    self.activate_fetcher_from_holding(rfid, student)
+                    return
+
+            # If no matching fetcher found in holding → normal waiting behavior
             self.pending_student = student
 
-            self.student_panel.image.setPixmap(self.load_photo(student.get("photo_path")))
+            self.student_panel.image.setPixmap(
+                self.load_photo(student.get("photo_path"))
+            )
             self.student_panel.name.setText(student["Student_name"])
             self.student_panel.info.setText(
                 f"ID: {student['Student_id']}\n"
@@ -414,10 +495,9 @@ class RFIDTapping(QMainWindow):
 
             self.status.setText("STUDENT SCANNED – WAITING FOR FETCHER")
 
-            # ⏱ 7-second waiting window
             self.student_wait_timer.start(7000)
             return
-
+        
         self.try_pair(student)
 
     def student_wait_timeout(self):
@@ -490,8 +570,18 @@ class RFIDTapping(QMainWindow):
         holding = self.holding[fetcher_rfid]
 
         self.active_fetcher = holding["fetcher"]
-        self.fetcher_students = holding["students"]
+
+        # 🔄 ALWAYS REFRESH ACTIVE STUDENTS FROM DATABASE
+        self.fetcher_students = self.get_students(fetcher_rfid)
+
+        # Keep previously fetched ones
         self.fetched_students = holding["fetched"]
+
+        # Remove fetched entries that no longer exist (inactive students)
+        active_ids = {s["Student_id"] for s in self.fetcher_students}
+        self.fetched_students = {
+            sid for sid in self.fetched_students if sid in active_ids
+        }
 
         self.sync_fetched_from_global()
 
@@ -559,6 +649,11 @@ class RFIDTapping(QMainWindow):
                     status
                 )
 
+                self.save_to_history_log(
+                    f"(OVERRIDE)Teacher: {self.active_teacher['Teacher_name']}",
+                    student
+                )
+
                 self.student_fetched_by[student["Student_id"]] = (
                     "TEACHER",
                     self.active_teacher
@@ -623,7 +718,7 @@ class RFIDTapping(QMainWindow):
 
         self.cursor.execute("""
             SELECT * FROM registrations
-            WHERE rfid=%s AND student_id=%s
+            WHERE rfid=%s AND student_rfid=%s
         """, (
             self.active_fetcher["rfid"],
             student["Student_id"]
@@ -658,25 +753,47 @@ class RFIDTapping(QMainWindow):
         )
 
         if authorized:
+            self.save_to_history_log(
+                self.active_fetcher["Fetcher_name"],
+                student
+            )
+
+        if authorized:
             self.fetched_students.add(student["Student_id"])
             self.globally_fetched_students.add(student["Student_id"])
             self.student_fetched_by[student["Student_id"]] = (
                 "FETCHER",
                 self.active_fetcher
             )
+
+            # 🔥 FORCE SYNC TO HOLDING IMMEDIATELY
+            rfid = self.active_fetcher["rfid"]
+            if rfid in self.holding:
+                self.holding[rfid]["fetched"].add(student["Student_id"])
+
             self.show_paired_by("FETCHER", self.active_fetcher)
             QTimer.singleShot(4000, self.reset_student_after_pair)
-            QTimer.singleShot(10000, self.safe_move_fetcher_to_holding)
+            QTimer.singleShot(4000, self.safe_move_fetcher_to_holding)
             self.update_fetcher_student_list()
             self.update_holding_display(self.active_fetcher["rfid"])
 
-            if len(self.fetched_students) == len(self.fetcher_students):
+            # 🔄 Refresh active students before completion check
+            self.fetcher_students = self.get_students(self.active_fetcher["rfid"])
+
+            active_ids = {s["Student_id"] for s in self.fetcher_students}
+            self.fetched_students = {
+                sid for sid in self.fetched_students if sid in active_ids
+            }
+
+            if len(self.fetcher_students) > 0 and \
+            len(self.fetched_students) == len(self.fetcher_students):
+
                 self.completed_fetchers.add(self.active_fetcher["rfid"])
                 self.remove_from_holding(self.active_fetcher["rfid"])
                 QTimer.singleShot(3000, self.reset_all)
                 return
 
-            self.fetcher_timer.start(8000)
+            
 
         self.student_display_timer.start(3000)
 
@@ -693,6 +810,26 @@ class RFIDTapping(QMainWindow):
             return
 
         rfid = self.active_fetcher["rfid"]
+
+        # 🔄 Always refresh before creating holding card
+        self.fetcher_students = self.get_students(rfid)
+
+        active_ids = {s["Student_id"] for s in self.fetcher_students}
+
+        self.fetched_students = {
+            sid for sid in self.fetched_students if sid in active_ids
+        }
+
+        self.sync_fetched_from_global()
+
+        # ✅ Final completion check
+        if len(self.fetcher_students) > 0 and \
+        len(self.fetched_students) == len(self.fetcher_students):
+
+            self.completed_fetchers.add(rfid)
+            self.remove_from_holding(rfid)
+            self.reset_all()
+            return
 
         if rfid in self.holding and self.active_fetcher is None:
             return
@@ -740,7 +877,7 @@ class RFIDTapping(QMainWindow):
             student_labels.append(lbl)
 
         h.addLayout(v)
-        self.holding_layout.addWidget(box)
+        
 
         # SAVE TO HOLDING QUEUE (LOGIC UNCHANGED)
         self.holding[rfid] = {
@@ -754,6 +891,8 @@ class RFIDTapping(QMainWindow):
         }
 
         self.reset_all()
+        self.holding_page_index = 0
+        self.update_holding_pagination()
 
     def cleanup_holding(self):
         now = datetime.now()
@@ -765,14 +904,17 @@ class RFIDTapping(QMainWindow):
         if fetcher_rfid in self.holding:
             self.holding[fetcher_rfid]["widget"].deleteLater()
             del self.holding[fetcher_rfid]
+            self.holding_page_index = 0
+            self.update_holding_pagination()
 
     # ---------------- HELPERS ----------------
     def get_students(self, rfid):
         self.cursor.execute("""
-            SELECT s.Student_id, s.Student_name
-            FROM registrations r
-            JOIN student s ON r.student_id = s.Student_id
-            WHERE r.rfid=%s
+            SELECT student_rfid AS Student_id,
+                student_name AS Student_name
+            FROM registrations
+            WHERE rfid=%s
+            AND status='Active'
         """, (rfid,))
         return self.cursor.fetchall()
 
@@ -824,6 +966,26 @@ class RFIDTapping(QMainWindow):
                 datetime.now().strftime("%H:%M:%S"),
                 fetcher, student, status
             ])
+    
+    def save_to_history_log(self, fetcher_name, student):
+        try:
+            self.cursor.execute("""
+                INSERT INTO history_log
+                (fetcher_name, student_name, student_id, grade, teacher, location, time_out)
+                VALUES (%s, %s, %s, %s, %s, %s, NOW())
+            """, (
+                fetcher_name,
+                student["Student_name"],
+                student["Student_id"],
+                student["grade_lvl"],
+                student["Teacher_name"],
+                "Main Gate"
+            ))
+
+            self.db.commit()
+
+        except Exception as e:
+            print("History log DB error:", e)
 
     def update_clock(self):
         now = datetime.now()
@@ -855,18 +1017,63 @@ class RFIDTapping(QMainWindow):
         event.accept()
     
     def safe_move_fetcher_to_holding(self):
-        if self.active_fetcher:
-            self.move_fetcher_to_holding()
+        if not self.active_fetcher:
+            return
+
+        rfid = self.active_fetcher["rfid"]
+
+        # 🔄 Always refresh active students from DB
+        self.fetcher_students = self.get_students(rfid)
+
+        active_ids = {s["Student_id"] for s in self.fetcher_students}
+
+        # 🔄 Clean fetched list
+        self.fetched_students = {
+            sid for sid in self.fetched_students if sid in active_ids
+        }
+
+        # 🔄 Sync global fetched
+        self.sync_fetched_from_global()
+
+        # ✅ FINAL COMPLETION CHECK BEFORE HOLDING
+        if len(self.fetcher_students) > 0 and \
+        len(self.fetched_students) == len(self.fetcher_students):
+
+            self.completed_fetchers.add(rfid)
+            self.remove_from_holding(rfid)
+            self.reset_all()
+            return
+
+        # 🔄 Update holding dictionary BEFORE move
+        if rfid in self.holding:
+            self.holding[rfid]["students"] = self.fetcher_students
+            self.holding[rfid]["fetched"] = self.fetched_students
+            self.holding[rfid]["student_ids"] = active_ids
+
+        self.move_fetcher_to_holding()
     
     def update_holding_display(self, fetcher_rfid):
         if fetcher_rfid not in self.holding:
             return
 
         holding = self.holding[fetcher_rfid]
+
+        # 🔄 Always re-sync from DB before coloring
+        fresh_students = self.get_students(fetcher_rfid)
+        active_ids = {s["Student_id"] for s in fresh_students}
+
+        holding["students"] = fresh_students
+        holding["student_ids"] = active_ids
+
+        holding["fetched"] = {
+            sid for sid in holding["fetched"] if sid in active_ids
+        }
+
         for lbl, s in zip(holding["labels"], holding["students"]):
             lbl.setStyleSheet(
                 "color:green;" if s["Student_id"] in holding["fetched"] else "color:gray;"
             )
+
     def reset_teacher_mode(self):
         self.active_teacher = None
         self.teacher_timer.stop()
@@ -969,12 +1176,14 @@ class RFIDTapping(QMainWindow):
             if h["fetcher"] == self.active_fetcher:
                 widget = h.get("widget")
                 if widget:
-                    widget.show()
+                    widget.hide()
                 break
 
         self.active_fetcher = None
         self.fetcher_students = []
         self.fetched_students = set()
+
+        self.update_holding_pagination()
 
     def end_replay_mode(self):
          # 🔓 unlock first
@@ -1022,7 +1231,79 @@ class RFIDTapping(QMainWindow):
 
         if len(self.fetched_students) == len(self.fetcher_students):
             self.completed_fetchers.add(self.active_fetcher["rfid"])
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.update_holding_pagination()
+
+    def update_holding_pagination(self):
+        if not self.holding:
+            return
+
+        # Approximate height of one holding card
+        card_height = 140  # adjust if needed
+
+        available_height = self.height() - 300
+
+        per_page = max(1, available_height // card_height)
+
+        if per_page != self.holding_cards_per_page:
+            self.holding_cards_per_page = per_page
+            self.holding_page_index = 0
+
+        self.apply_holding_page()
+
+    def apply_holding_page(self):
+        # 1️⃣ Clear layout completely
+        while self.holding_layout.count():
+            item = self.holding_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.setParent(None)
+
+        # Always keep consistent order (oldest first)
+        cards = sorted(
+            self.holding.values(),
+            key=lambda x: x["expires"]
+        )
+        total = len(cards)
+
+        if total == 0:
+            return
+
+        # ✅ FIX: Ensure page index is valid
+        total_pages = (total - 1) // self.holding_cards_per_page + 1
+
+        if self.holding_page_index >= total_pages:
+            self.holding_page_index = 0
+
+        start = self.holding_page_index * self.holding_cards_per_page
+        end = start + self.holding_cards_per_page
+
+        # 2️⃣ Add only cards that belong to this page
+        for i in range(start, min(end, total)):
+            self.holding_layout.addWidget(cards[i]["widget"])
     
+    def rotate_holding_page(self):
+
+        total_cards = len(self.holding)
+
+        if total_cards == 0:
+            return
+
+        total_pages = (total_cards - 1) // self.holding_cards_per_page + 1
+
+        if total_pages <= 1:
+            self.holding_page_index = 0
+            self.apply_holding_page()
+            return
+
+        self.holding_page_index += 1
+
+        if self.holding_page_index >= total_pages:
+            self.holding_page_index = 0
+
+        self.apply_holding_page()
 
 
 # ---------------- RUN ----------------
