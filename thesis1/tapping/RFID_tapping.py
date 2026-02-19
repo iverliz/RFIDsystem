@@ -20,8 +20,8 @@ HISTORY_DIR = os.path.join(BASE_DIR, "history log")
 
 SOUND_DIR = os.path.join(BASE_DIR, "soundeffect")
 
-AUTHORIZED_SOUND = os.path.join(SOUND_DIR, "authorized_sound.wav")
-DENIED_SOUND = os.path.join(SOUND_DIR, "denied_sound.wav")
+AUTHORIZED_SOUND = os.path.join(SOUND_DIR, "authorized.wav")
+DENIED_SOUND = os.path.join(SOUND_DIR, "denied.wav")
 
 # ---------------- SERIAL THREAD ----------------
 class SerialThread(QThread):
