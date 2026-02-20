@@ -195,6 +195,7 @@ class RfidRegistration(tk.Frame):
         s_name = self.student_name_var.get().strip()
         s_rfid = self.student_rfid_var.get().strip()
         grade = self.grade_var.get().strip()
+        teacher = self.teacher_var.get().strip()
         
         # Photo handling
         s_photo = getattr(self.student_photo_lbl, 'image_bytes', None)
@@ -234,19 +235,21 @@ class RfidRegistration(tk.Frame):
                     # STEP 3: MANAGE REGISTRATION LINK (The Child)
                     if self.mode == "edit":
                         sql_reg = """UPDATE registrations SET 
-                                     fetcher_code=%s, rfid=%s, fetcher_name=%s, student_id=%s, 
-                                     student_name=%s, grade=%s, address=%s, contact=%s, 
-                                     paired_rfid=%s, student_rfid=%s, photo_path=%s, fetcher_photo_path=%s 
-                                     WHERE registration_id=%s"""
-                        val_reg = (f_code, f_rfid, f_name, s_id, s_name, grade, f_address, f_contact, 
-                                   s_rfid, s_rfid, s_photo, f_photo, self.selected_registration_id)
+                                    fetcher_code=%s, rfid=%s, fetcher_name=%s, student_id=%s, 
+                                    student_name=%s, grade=%s, teacher=%s, address=%s, contact=%s, 
+                                    paired_rfid=%s, student_rfid=%s, photo_path=%s, fetcher_photo_path=%s 
+                                    WHERE registration_id=%s"""
+                        val_reg = (f_code, f_rfid, f_name, s_id, s_name, grade, teacher,
+                                    f_address, f_contact, 
+                                    s_rfid, s_rfid, s_photo, f_photo, self.selected_registration_id)
                     else:
-                        sql_reg = """INSERT INTO registrations (fetcher_code, rfid, fetcher_name, student_id, 
-                                     student_name, grade, address, contact, paired_rfid, student_rfid, 
-                                     status, photo_path, fetcher_photo_path) 
+                        sql_reg = """INSERT INTO registrations (fetcher_code, rfid,         fetcher_name, student_id, 
+                                student_name, grade, teacher, address, contact, paired_rfid, student_rfid, 
+                                status, photo_path, fetcher_photo_path)) 
                                      VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Active',%s,%s)"""
-                        val_reg = (f_code, f_rfid, f_name, s_id, s_name, grade, f_address, f_contact, 
-                                   s_rfid, s_rfid, s_photo, f_photo)
+                        val_reg = (f_code, f_rfid, f_name, s_id, s_name, grade, teacher,
+                                    f_address, f_contact, 
+                                    s_rfid, s_rfid, s_photo, f_photo)
                     
                     cur.execute(sql_reg, val_reg)
                     conn.commit()
@@ -300,13 +303,19 @@ class RfidRegistration(tk.Frame):
                     cur.execute("SELECT * FROM registrations WHERE registration_id=%s", (self.selected_registration_id,))
                     r = cur.fetchone()
                     if r:
-                        # SET THE NEW COLUMN
-                        self.fetcher_code_var.set(r['fetcher_code'] or "")
-                        # SET THE REST
-                        self.rfid_var.set(r['rfid'] or "")
-                        self.fetcher_name_var.set(r['fetcher_name'] or "")
-                        self.student_id_var.set(r['student_id'] or "")
-                        # ... (keep your other existing .set() calls here) ...
+                        self.fetcher_code_var.set(r.get('fetcher_code', '') or "")
+                        self.rfid_var.set(r.get('rfid', '') or "")
+                        self.fetcher_name_var.set(r.get('fetcher_name', '') or "")
+                        self.fetcher_address_var.set(r.get('address', '') or "")
+                        self.fetcher_contact_var.set(r.get('contact', '') or "")
+
+                        self.student_id_var.set(r.get('student_id', '') or "")
+                        self.student_name_var.set(r.get('student_name', '') or "")
+                        self.grade_var.set(r.get('grade', '') or "")
+                        self.teacher_var.set(r.get('teacher', '') or "")
+                        self.student_rfid_var.set(r.get('student_rfid', '') or "")
+                        self.paired_rfid_var.set(r.get('paired_rfid', '') or "")
+
                         self.display_blob(self.student_photo_lbl, r['photo_path'])
                         self.display_blob(self.fetcher_photo_lbl, r['fetcher_photo_path'])
         except Exception as e: 

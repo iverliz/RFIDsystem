@@ -368,7 +368,7 @@ class RFIDTapping(QMainWindow):
             
             fetched_count = sum(
                 1 for s in students
-                if s["Student_id"] in self.globally_fetched_students
+                if s["Student_rfid"] in self.globally_fetched_students
             )
 
             if students and fetched_count == len(students):
