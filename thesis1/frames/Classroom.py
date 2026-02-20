@@ -340,12 +340,18 @@ class ClassroomFrame(tk.Frame):
                         stream = io.BytesIO(photo_blob)
                         img = Image.open(stream)
 
-                        # Keep aspect ratio, fit inside 180x180 box
                         max_size = (180, 180)
                         img.thumbnail(max_size, Image.Resampling.LANCZOS)
 
                         self.current_photo = ImageTk.PhotoImage(img)
-                        self.photo_label.config(image=self.current_photo, text="")
+
+                        # Force pixel-based size
+                        self.photo_label.config(
+                            image=self.current_photo,
+                            text="",
+                            width=180,
+                            height=180
+                        )
                     else:
                         self.photo_label.config(image='', text="No Photo")
 
