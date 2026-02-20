@@ -264,3 +264,13 @@ class OverrideFrame(tk.Frame):
             self.refresh_list()
         except Exception as e:
             messagebox.showerror("Error", str(e))
+
+    
+    def handle_rfid_tap(self, uid):
+        # Only fill if RFID entry is focused
+        focused = self.focus_get()
+
+        if focused == self.rfid_entry:
+            self.rfid_entry.delete(0, tk.END)
+            self.rfid_entry.insert(0, uid)
+            print("Override RFID filled:", uid)
