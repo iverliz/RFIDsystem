@@ -186,8 +186,10 @@ class TeacherRecord(tk.Frame):
         self.teacher_table.selection_remove(self.teacher_table.selection())
 
     def validate_fields(self):
-        if not self.teacher_name_var.get().strip(): return "Teacher Name is required"
-        if not self.teacher_grade_var.get().isdigit(): return "Grade must be numeric"
+        if not self.teacher_name_var.get().strip():
+            return "Teacher Name is required"
+        if not self.teacher_grade_var.get().strip():
+            return "Grade is required"
         return None
 
     # ================= CRUD LOGIC =================
@@ -217,7 +219,7 @@ class TeacherRecord(tk.Frame):
             with db_connect() as conn:
                 with conn.cursor() as cursor:
                     cursor.execute("INSERT INTO teacher (teacher_name, teacher_grade, photo_path) VALUES (%s, %s, %s)",
-                                   (self.teacher_name_var.get().strip(), int(self.teacher_grade_var.get()), binary_photo))
+                                   (self.teacher_name_var.get().strip(), self.teacher_grade_var.get().strip(), binary_photo))
                     conn.commit()
             
             messagebox.showinfo("Success", "Teacher added successfully")
@@ -232,7 +234,7 @@ class TeacherRecord(tk.Frame):
 
         try:
             sql_parts = ["teacher_name=%s", "teacher_grade=%s"]
-            params = [self.teacher_name_var.get().strip(), int(self.teacher_grade_var.get())]
+            params = [self.teacher_name_var.get().strip(), self.teacher_grade_var.get().strip()]
 
             if self.photo_path is None:
                 sql_parts.append("photo_path=NULL")

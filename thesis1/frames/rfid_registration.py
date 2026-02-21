@@ -243,10 +243,11 @@ class RfidRegistration(tk.Frame):
                                     f_address, f_contact, 
                                     s_rfid, s_rfid, s_photo, f_photo, self.selected_registration_id)
                     else:
-                        sql_reg = """INSERT INTO registrations (fetcher_code, rfid,         fetcher_name, student_id, 
-                                student_name, grade, teacher, address, contact, paired_rfid, student_rfid, 
-                                status, photo_path, fetcher_photo_path)) 
-                                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Active',%s,%s)"""
+                        sql_reg = """INSERT INTO registrations 
+                                    (fetcher_code, rfid, fetcher_name, student_id, 
+                                    student_name, grade, teacher, address, contact, 
+                                    paired_rfid, student_rfid, status, photo_path, fetcher_photo_path) 
+                                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Active',%s,%s)"""
                         val_reg = (f_code, f_rfid, f_name, s_id, s_name, grade, teacher,
                                     f_address, f_contact, 
                                     s_rfid, s_rfid, s_photo, f_photo)
@@ -482,27 +483,33 @@ class RfidRegistration(tk.Frame):
             
     def auto_fill_student_details(self, *args):
         sid = self.student_id_var.get().strip()
-        if not sid: return
+        if not sid:
+            return
 
         try:
             with db_connect() as conn:
                 with conn.cursor(dictionary=True) as cur:
-                # Using your actual column names: Student_name, grade_lvl
                     cur.execute("""
-                    SELECT Student_name, grade_lvl, student_rfid 
-                    FROM student 
-                    WHERE Student_id = %s
-                """, (sid,))
+                        SELECT Student_name, grade_lvl, student_rfid, photo_path
+                        FROM student 
+                        WHERE Student_id = %s
+                    """, (sid,))
                     res = cur.fetchone()
 
                     if res:
                         self.student_name_var.set(res['Student_name'])
                         self.grade_var.set(res['grade_lvl'])
                         self.student_rfid_var.set(res['student_rfid'])
+
+                        # ✅ THIS IS THE MISSING PART
+                        self.display_blob(self.student_photo_lbl, res['photo_path'])
+
                     else:
                         self.student_name_var.set("")
                         self.grade_var.set("")
                         self.student_rfid_var.set("")
+                        self.display_blob(self.student_photo_lbl, None)
+
         except Exception as e:
             print("Auto-fill error:", e)
 
