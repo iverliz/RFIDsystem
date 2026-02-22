@@ -588,6 +588,22 @@ class RFIDTapping(QMainWindow):
 
         self.check_and_mark_fetcher_completed()
 
+        # 🔥 Freeze pagination on this fetcher's page
+        self.holding_pagination_timer.stop()
+
+        # Find correct page of this fetcher
+        cards = sorted(
+            self.holding.items(),
+            key=lambda x: x[1]["expires"]
+        )
+
+        for index, (rfid, data) in enumerate(cards):
+            if rfid == fetcher_rfid:
+                self.holding_page_index = index // self.holding_cards_per_page
+                break
+
+        self.apply_holding_page()
+
         holding["widget"].hide()
 
         self.fetcher_panel.image.setPixmap(
@@ -662,8 +678,30 @@ class RFIDTapping(QMainWindow):
 
                 for rfid, h in self.holding.items():
                     if student["Student_id"] in h["student_ids"]:
+
                         h["fetched"].add(student["Student_id"])
+
+                        # 🔄 Refresh student list from DB
+                        fresh_students = self.get_students(rfid)
+                        active_ids = {s["Student_id"] for s in fresh_students}
+
+                        h["students"] = fresh_students
+                        h["student_ids"] = active_ids
+
+                        # Clean fetched list
+                        h["fetched"] = {
+                            sid for sid in h["fetched"] if sid in active_ids
+                        }
+
                         self.update_holding_display(rfid)
+
+                        # ✅ FINAL COMPLETION CHECK WHILE IN HOLDING
+                        if len(h["students"]) > 0 and \
+                        len(h["fetched"]) == len(h["students"]):
+
+                            self.completed_fetchers.add(rfid)
+                            self.remove_from_holding(rfid)
+
                         break
 
                 self.last_paired_type = "TEACHER"
@@ -837,6 +875,11 @@ class RFIDTapping(QMainWindow):
 
         if rfid in self.holding:
             self.return_fetcher_to_holding(rfid)
+
+            # 🔥 RESTART SCROLLING AFTER FETCHER RETURNS
+            if not self.holding_pagination_timer.isActive():
+                self.holding_pagination_timer.start(4000)
+
             self.reset_all()
             return
 
@@ -901,12 +944,18 @@ class RFIDTapping(QMainWindow):
             if self.holding[rfid]["expires"] < now:
                 self.remove_from_holding(rfid)
 
+                
+
     def remove_from_holding(self, fetcher_rfid):
         if fetcher_rfid in self.holding:
             self.holding[fetcher_rfid]["widget"].deleteLater()
             del self.holding[fetcher_rfid]
             self.holding_page_index = 0
             self.update_holding_pagination()
+
+            # 🔥 Ensure scrolling continues after removal
+            if not self.holding_pagination_timer.isActive():
+                self.holding_pagination_timer.start(4000)
 
     # ---------------- HELPERS ----------------
     def get_students(self, rfid):
@@ -1170,22 +1219,42 @@ class RFIDTapping(QMainWindow):
                 return
         
     def return_existing_fetcher_to_holding(self):
-        """
-        Return the temporarily shown fetcher back to holding
-        WITHOUT recreating or resetting logic.
-        """
-        for rfid, h in self.holding.items():
-            if h["fetcher"] == self.active_fetcher:
-                widget = h.get("widget")
-                if widget:
-                    widget.hide()
+        if not self.active_fetcher:
+            return
+
+        target_rfid = self.active_fetcher["rfid"]
+
+        # 🔥 STOP auto rotation temporarily
+        self.holding_pagination_timer.stop()
+
+        # Same sorting used in pagination
+        cards = sorted(
+            self.holding.items(),
+            key=lambda x: x[1]["expires"]
+        )
+
+        # Find index of this fetcher
+        for index, (rfid, data) in enumerate(cards):
+
+            if rfid == target_rfid:
+
+                target_page = index // self.holding_cards_per_page
+                self.holding_page_index = target_page
                 break
 
+        # Reset active state
         self.active_fetcher = None
         self.fetcher_students = []
         self.fetched_students = set()
 
-        self.update_holding_pagination()
+        # Force redraw
+        self.apply_holding_page()
+
+        def restart_timer():
+            if not self.holding_pagination_timer.isActive():
+                self.holding_pagination_timer.start(4000)
+
+        QTimer.singleShot(500, restart_timer)
 
     def end_replay_mode(self):
          # 🔓 unlock first
@@ -1256,24 +1325,23 @@ class RFIDTapping(QMainWindow):
         self.apply_holding_page()
 
     def apply_holding_page(self):
-        # 1️⃣ Clear layout completely
+        # 🔒 Just remove from layout — DO NOT remove parent
         while self.holding_layout.count():
             item = self.holding_layout.takeAt(0)
             widget = item.widget()
             if widget:
-                widget.setParent(None)
+                widget.hide()
 
-        # Always keep consistent order (oldest first)
+        # Always keep consistent order
         cards = sorted(
             self.holding.values(),
             key=lambda x: x["expires"]
         )
-        total = len(cards)
 
+        total = len(cards)
         if total == 0:
             return
 
-        # ✅ FIX: Ensure page index is valid
         total_pages = (total - 1) // self.holding_cards_per_page + 1
 
         if self.holding_page_index >= total_pages:
@@ -1282,9 +1350,11 @@ class RFIDTapping(QMainWindow):
         start = self.holding_page_index * self.holding_cards_per_page
         end = start + self.holding_cards_per_page
 
-        # 2️⃣ Add only cards that belong to this page
+        # 🔥 Show only widgets in this page
         for i in range(start, min(end, total)):
-            self.holding_layout.addWidget(cards[i]["widget"])
+            widget = cards[i]["widget"]
+            self.holding_layout.addWidget(widget)
+            widget.show()
     
     def rotate_holding_page(self):
 
