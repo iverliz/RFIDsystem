@@ -6,7 +6,7 @@ from PyQt5.QtMultimedia import QSoundEffect
 from PyQt5.QtCore import QUrl, QByteArray
 
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
-from PyQt5.QtGui import QPixmap, QFont
+from PyQt5.QtGui import QPixmap, QFont, QIcon
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QPushButton,
     QVBoxLayout, QHBoxLayout, QFrame, QSizePolicy
@@ -17,6 +17,8 @@ from PyQt5.QtWidgets import (
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_PHOTO = os.path.join(BASE_DIR, "..", "assets", "default_photo.jfif")
 HISTORY_DIR = os.path.join(BASE_DIR, "history log")
+
+LOGO_PATH = os.path.join(BASE_DIR, "logo", "logo.png")
 
 SOUND_DIR = os.path.join(BASE_DIR, "soundeffect")
 
@@ -60,6 +62,10 @@ class RFIDTapping(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("RFID Fetcher - Student System")
+
+        if os.path.exists(LOGO_PATH):
+            self.setWindowIcon(QIcon(LOGO_PATH))
+            
         self.setGeometry(100, 100, 1300, 800)
 
         # ---------------- DATABASE ----------------
