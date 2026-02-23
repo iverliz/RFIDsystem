@@ -246,7 +246,11 @@ class RFIDTapping(QMainWindow):
         lbl.setFont(QFont("Segoe UI", 25, QFont.Bold))
         lbl.setStyleSheet(f"background:{color};color:white;padding:8px;")
 
-        img = QLabel(alignment=Qt.AlignCenter)
+        img = QLabel(alignment=Qt.AlignHCenter)
+        img.setFixedSize(220, 220)   # 🔥 bigger square
+        img.setScaledContents(False)
+        img.setContentsMargins(0, 20, 0, 0)
+        
         name = QLabel("WAITING", alignment=Qt.AlignCenter)
         name.setFont(QFont("Segoe UI", 17, QFont.Bold))
 
@@ -254,8 +258,10 @@ class RFIDTapping(QMainWindow):
         info.setWordWrap(True)
         info.setFont(QFont("Segoe UI", 14))
 
-        for w in (lbl, img, name, info):
-            layout.addWidget(w)
+        layout.addWidget(lbl)
+        layout.addWidget(img, alignment=Qt.AlignHCenter)
+        layout.addWidget(name)
+        layout.addWidget(info)
 
         frame.title_label = lbl
 
@@ -267,13 +273,26 @@ class RFIDTapping(QMainWindow):
         pix = QPixmap()
 
         if image_data:
-            # image_data is BLOB (bytes)
             pix.loadFromData(image_data)
 
         if pix.isNull():
             pix = QPixmap(DEFAULT_PHOTO)
 
-        return pix.scaled(150, 150, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        # 🔥 FORCE SQUARE CROP (CENTER CROP)
+        size = min(pix.width(), pix.height())
+        x = (pix.width() - size) // 2
+        y = (pix.height() - size) // 2
+
+        square = pix.copy(x, y, size, size)
+
+        # 🔥 SCALE BIGGER SQUARE
+        return square.scaled(
+            160,
+            160,
+            Qt.IgnoreAspectRatio,
+            Qt.SmoothTransformation
+        )
+    
 
     # ---------------- RFID ----------------
     def process_rfid(self, uid):
