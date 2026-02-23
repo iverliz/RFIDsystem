@@ -218,17 +218,18 @@ class RFIDTapping(QMainWindow):
         self.status.setStyleSheet("background:#6b7280;color:white;padding:10px;")
 
         self.open_btn = QPushButton("📂 Open History File")
+        self.open_btn.setStyleSheet("font-size:10px;padding:3px;")
         self.open_btn.clicked.connect(
             lambda: subprocess.Popen(["explorer", os.path.abspath(self.history_file)])
         )
-
+        
         self.holding_layout = QVBoxLayout()
         self.spacer = QFrame()
         self.spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         for w in (
             self.title, self.datetime_frame,
-            self.status, self.open_btn
+            self.status, self.open_btn, 
         ):
             right.addWidget(w)
 
