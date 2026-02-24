@@ -331,6 +331,7 @@ class RFIDTapping(QMainWindow):
                 return
 
             employee_id = teacher_reg.get("employee_id")
+            self.active_teacher_employee_id = employee_id
 
             if not employee_id:
                 return
@@ -670,10 +671,29 @@ class RFIDTapping(QMainWindow):
 
             # ✅ AUTHORIZATION RULE
             # Student.Teacher_name MUST match Teacher.Teacher_name
-            if student["Teacher_name"] == self.active_teacher["Teacher_name"]:
-                authorized = True
-                status = "AUTHORIZED (TEACHER OVERRIDE)"
-                mess ="AUTHORIZED"
+            # 🔎 GET teacher employee_id from classroom table using student_id
+            self.cursor.execute("""
+                SELECT employee_id
+                FROM classroom
+                WHERE student_id = %s
+            """, (student["Student_id"],))
+
+            classroom_row = self.cursor.fetchone()
+
+            if classroom_row and classroom_row.get("employee_id"):
+
+                classroom_teacher_id = classroom_row["employee_id"]
+
+                # 🔐 Compare employee IDs
+                if classroom_teacher_id == self.active_teacher_employee_id:
+                    authorized = True
+                    status = "AUTHORIZED (TEACHER OVERRIDE)"
+                    mess = "AUTHORIZED"
+                else:
+                    authorized = False
+                    status = "DENIED"
+                    mess = "DENIED"
+
             else:
                 authorized = False
                 status = "DENIED"
