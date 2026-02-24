@@ -23,6 +23,7 @@ class ClassroomFrame(tk.Frame):
             {"role": "Teacher", "username": "Guest"}
         )
         self.username = self.user_data.get("username")
+        self.employee_id = self.user_data.get("employee_id")
         
         # 2. Sync Teacher Name from DB
         self.real_teacher_name = self.get_teacher_display_name()
@@ -244,12 +245,13 @@ class ClassroomFrame(tk.Frame):
                     # 2. Insert everything into classroom as a permanent snapshot
                     query = """
                         INSERT INTO classroom 
-                        (teacher_name, student_id) 
-                        VALUES (%s, %s)
+                        (teacher_name, student_id, employee_id) 
+                        VALUES (%s, %s, %s)
                     """
                     cur.execute(query, (
                         self.real_teacher_name,
-                        sid
+                        sid,
+                        self.employee_id
                     ))
                     conn.commit()
             

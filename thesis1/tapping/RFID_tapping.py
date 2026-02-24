@@ -644,7 +644,7 @@ class RFIDTapping(QMainWindow):
 
         
     def try_pair(self, student):
-
+        mess = ""
         # ---------- TEACHER OVERRIDE ----------
         if self.active_teacher:
 
@@ -673,12 +673,14 @@ class RFIDTapping(QMainWindow):
             if student["Teacher_name"] == self.active_teacher["Teacher_name"]:
                 authorized = True
                 status = "AUTHORIZED (TEACHER OVERRIDE)"
+                mess ="AUTHORIZED"
             else:
                 authorized = False
                 status = "DENIED"
+                mess = "DENIED"
 
             # Send result to Arduino
-            self.serial.write(status)
+            self.serial.write(mess)
 
             # Sound + record
             if authorized:
