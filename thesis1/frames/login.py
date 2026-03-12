@@ -3,12 +3,14 @@ from tkinter import messagebox
 from PIL import ImageTk, Image
 import sys, os
 import bcrypt
-# Ensure utility imports work
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
+
 from utils.database import db_connect
 from utils.validators import validate_required
-from utils.helpers import add_hover_effect, get_image_path # make sure this exists
+from utils.helpers import add_hover_effect, get_image_path 
+import threading
 
 class LoginFrame(tk.Frame):
     def __init__(self, parent, controller):
@@ -132,11 +134,8 @@ class LoginFrame(tk.Frame):
         else:
             messagebox.showerror("Error", "Username not found")
 
-    # ---------------- PASSWORD TOGGLE ----------------
     def password_visibility(self):
         if self.password.cget("show") == "*":
             self.password.config(show="")
         else:
             self.password.config(show="*")
-            
-   

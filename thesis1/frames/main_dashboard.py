@@ -10,6 +10,7 @@ from frames.fetcher_record import FetcherRecord
 from frames.rfid_registration import RfidRegistration
 from frames.Classroom import ClassroomFrame
 from frames.overrride import OverrideFrame
+from frames.adminoverride import AdminOverrideFrame
 
 # Reusable hover effect
 def add_hover_effect(widget, hover_bg, default_bg):
@@ -53,6 +54,7 @@ class MainDashboard(tk.Frame):
             self.create_menu_button("Teacher Record", TeacherRecord)
             self.create_menu_button("Fetcher Record", FetcherRecord)
             self.create_menu_button("RFID Registration", RfidRegistration)
+            self.create_menu_button("Admin Master", AdminOverrideFrame)
             self.create_menu_button("Override", OverrideFrame)
             self.create_menu_button("History Log", RFIDHistory)
             self.create_menu_button("Reports", Report)
@@ -111,17 +113,12 @@ class MainDashboard(tk.Frame):
             self.current_frame = frame_class(self.main_area, self.controller)
             self.current_frame.pack(fill="both", expand=True)
 
-            # 2. CRITICAL FIX: Tell the Main App (controller) that THIS is the active frame
-            # This ensures dispatch_rfid sends data to the visible frame
-            frame_name = frame_class.__name__
-            
-            
 
+            frame_name = frame_class.__name__
+        
             # 3. Highlight menu button
             for btn, cls in self.menu_buttons.items():
                 btn.config(bg="#00838f" if cls == frame_class else "#00acc1")
-                
-            print(f"Debug: MainDashboard switched to {frame_name}")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to open {frame_class.__name__}:\n{e}")
 

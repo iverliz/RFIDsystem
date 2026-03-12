@@ -21,6 +21,8 @@ class FetcherRecord(tk.Frame):
         self.photo = None 
         self.edit_mode = False
         self.current_fetcher_id = None
+        self.num_validate = self.register(self.only_numbers)
+        self.contact_validate = self.register(self.contact_limit)
 
         # ================= PAGINATION & SEARCH STATE =================
         self.page_size = 50
@@ -57,12 +59,12 @@ class FetcherRecord(tk.Frame):
         self.edit_label = tk.Label(self.left_box, text="VIEW MODE", font=("Arial", 10, "bold"), fg="gray", bg="white")
         self.edit_label.place(x=300, y=10)
 
-        # Form Variables
-        self.fetcher_name_var = tk.StringVar()
         self.fetcher_code_var = tk.StringVar()
+        self.fetcher_name_var = tk.StringVar()
         self.address_var = tk.StringVar()
         self.contact_var = tk.StringVar()
-
+        self.search_var = tk.StringVar()
+        
         fields = [
             ("Fetcher Code:", self.fetcher_code_var),
             ("Fetcher Name:", self.fetcher_name_var),
@@ -74,10 +76,45 @@ class FetcherRecord(tk.Frame):
         y_start = 200
         for i, (label, var) in enumerate(fields):
             tk.Label(self.left_box, text=label, bg="white", font=("Arial", 11)).place(x=20, y=y_start + i * 40)
+    
+            if label == "Contact Number:":
+        # Use the registered validation command
+                ent = tk.Entry(self.left_box, textvariable=var, width=30, font=("Arial", 11),
+                       validate="key", validatecommand=(self.contact_validate, "%P"))
+            elif label == "Fetcher Code:":
+                ent = tk.Entry(self.left_box, textvariable=var, width=30, font=("Arial", 11))
+                ent.config(state="readonly", readonlybackground="#f0f0f0")
+            else:
+                ent = tk.Entry(self.left_box, textvariable=var, width=30, font=("Arial", 11))
+    
+            ent.place(x=150, y=y_start + i * 40)
+            self.entries.append(ent)
+    
+    # Check if this is the Contact Number field
+        if label == "Contact Number:":
+            ent = tk.Entry(self.left_box, textvariable=var, width=30, font=("Arial", 11),
+                       validate="key", validatecommand=(self.contact_validate, "%P"))
+        elif label == "Fetcher Code:":
+            ent = tk.Entry(self.left_box, textvariable=var, width=30, font=("Arial", 11))
+            ent.config(state="readonly", readonlybackground="#f0f0f0")
+        else:
+            ent = tk.Entry(self.left_box, textvariable=var, width=30, font=("Arial", 11))
+    
+        ent.place(x=150, y=y_start + i * 40)
+        self.entries.append(ent)
+        # Form Variables
+    
+        self.entries = []
+        y_start = 200
+        for i, (label, var) in enumerate(fields):
+            tk.Label(self.left_box, text=label, bg="white", font=("Arial", 11)).place(x=20, y=y_start + i * 40)
             ent = tk.Entry(self.left_box, textvariable=var, width=30, font=("Arial", 11))
             
             if label == "Fetcher Code:":
                 ent.config(state="readonly", readonlybackground="#f0f0f0")
+            if label == "Contact Number:":
+                ent = tk.Entry(self.left_box, textvariable=var, width=30, font=("Arial", 11),
+                   validate="key", validatecommand=(self.contact_validate, "%P"))
                 
             ent.place(x=150, y=y_start + i * 40)
             self.entries.append(ent)
@@ -108,7 +145,7 @@ class FetcherRecord(tk.Frame):
         self.right_panel.pack_propagate(False)
 
         tk.Label(self.right_panel, text="Search FETCHER (Name/Address/Code)", font=("Arial", 12, "bold"), bg="white").place(x=20, y=15)
-        self.search_var = tk.StringVar()
+        self.search_var.trace_add("write", lambda *args: self.search_fetcher())
         tk.Entry(self.right_panel, textvariable=self.search_var, width=30, font=("Arial", 11)).place(x=20, y=50)
         tk.Button(self.right_panel, text="Search", command=self.search_fetcher).place(x=280, y=47)
         
@@ -228,37 +265,6 @@ class FetcherRecord(tk.Frame):
         except Exception as e:
             print(f"Load error: {e}")
 
-    def search_fetcher(self):
-        keyword = self.search_var.get().strip()
-        
-        if not keyword:
-            self.clear_search()
-            return
-
-        try:
-            with db_connect() as conn:
-                with conn.cursor() as cursor:
-                    query = """SELECT ID, fetcher_code, Fetcher_name, Address, contact 
-                               FROM fetcher 
-                               WHERE Fetcher_name LIKE %s 
-                               OR Address LIKE %s 
-                               OR fetcher_code LIKE %s"""
-                    cursor.execute(query, (f"%{keyword}%", f"%{keyword}%", f"%{keyword}%"))
-                    self.search_results = cursor.fetchall()
-
-            self.search_page = 1
-            self.update_search_table()
-            
-            if not self.search_results:
-                messagebox.showinfo("Search", f"No results found for: {keyword}")
-                self.clear_search()
-                return
-            
-            else :
-                messagebox.showinfo("Search", f"Found {len(self.search_results)} results for: {keyword}")
-                
-        except Exception as e:
-            messagebox.showerror("Search Error", str(e))
 
     def clear_search(self):
         """Resets search and reloads data."""
@@ -456,3 +462,51 @@ class FetcherRecord(tk.Frame):
         except Exception as e:
             messagebox.showerror("Error", f"Generated code error: {e}")
             return "FC_0001"
+        
+    def only_numbers(self, v): 
+        return v.isdigit() or v == ""
+
+    def contact_limit(self, v): 
+        return (v.isdigit() and len(v) <= 11) or v == ""
+
+    def format_contact(self, *args):
+        # Ensure this matches the variable name in your StudentRecord class
+        val = self.contact_var.get() 
+        if val.startswith("9") and len(val) == 10: 
+            self.contact_var.set("0" + val)
+            
+    def search_fetcher(self):
+        keyword = self.search_var.get().strip()
+
+    # If the search box is empty, just load the original data and stop
+        if not keyword: 
+            self.search_results = []
+            self.current_page = 1
+            self.load_data()
+            self.clear_fields() # Added to clean UI on reset
+            return
+
+        try:
+            with db_connect() as conn:
+                with conn.cursor() as cursor:
+                # Updated query to match your Fetcher table columns
+                # Includes ID so your table selection logic still works
+                    query = """
+                    SELECT ID, fetcher_code, fetcher_name, Address, contact 
+                    FROM fetcher 
+                    WHERE fetcher_name LIKE %s 
+                       OR fetcher_code LIKE %s 
+                       OR Address LIKE %s
+                    """
+                # We use the same keyword for all three placeholders
+                    search_param = f"%{keyword}%"
+                    cursor.execute(query, (search_param, search_param, search_param))
+                
+                    self.search_results = cursor.fetchall()
+
+        # Update the UI state
+            self.search_page = 1
+            self.update_search_table()
+        
+        except Exception as e:
+            messagebox.showerror("Database Error", f"Search failed: {e}")

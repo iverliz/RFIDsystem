@@ -64,12 +64,20 @@ class TeacherRecord(tk.Frame):
         tk.Label(self.left_box, text="Teacher Name:", bg="white", font=("Arial", 11)).place(x=20, y=200)
         self.name_entry = tk.Entry(self.left_box, textvariable=self.teacher_name_var, width=30, font=("Arial", 11))
         self.name_entry.place(x=150, y=200)
+        
+        tk.Label(self.left_box, text="Grade Level:", bg="white", font=("Arial", 11)).place(x=20, y=240)
 
-        tk.Label(self.left_box, text="Grade:", bg="white", font=("Arial", 11)).place(x=20, y=240)
-        self.grade_entry = tk.Entry(self.left_box, textvariable=self.teacher_grade_var, width=30, font=("Arial", 11))
+        grade_options = ["K1", "K2", "1", "2", "3", "4", "5", "6"]
+        self.grade_entry = ttk.Spinbox(
+        self.left_box,
+        values=grade_options,
+        textvariable=self.teacher_grade_var,
+        width=28,
+        state="readonly"  
+        )
         self.grade_entry.place(x=150, y=240)
-
-        # Action Buttons
+        self.teacher_grade_var.set(grade_options[0])
+        
         btn_frame = tk.Frame(self.left_box, bg="white")
         btn_frame.place(x=15, y=320)
 
@@ -97,6 +105,8 @@ class TeacherRecord(tk.Frame):
         tk.Label(self.right_panel, text="Search Teacher (NAME/GRADE)", font=("Arial", 14, "bold"), bg="white").place(x=20, y=15)
 
         self.search_var = tk.StringVar()
+
+        self.search_var.trace_add("write", lambda *args: self.search_teacher())
         tk.Entry(self.right_panel, textvariable=self.search_var, width=25, font=("Arial", 11)).place(x=20, y=50)
         tk.Button(self.right_panel, text="Search", command=self.search_teacher).place(x=260, y=47)
         
@@ -191,6 +201,7 @@ class TeacherRecord(tk.Frame):
         if not self.teacher_grade_var.get().strip():
             return "Grade is required"
         return None
+    
 
     # ================= CRUD LOGIC =================
     def add_teacher(self):
@@ -327,27 +338,6 @@ class TeacherRecord(tk.Frame):
         except Exception as e:
             print(f"Load error: {e}")
 
-    def search_teacher(self):
-        keyword = self.search_var.get().strip()
-        if not keyword: return self.clear_search()
-        
-        try:
-            with db_connect() as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute("SELECT teacher_id, teacher_name, teacher_grade FROM teacher WHERE teacher_name LIKE %s", (f"%{keyword}%",))
-                    self.search_results = cursor.fetchall()
-            
-            if not self.search_results:
-                messagebox.showinfo("Search", f"No results found for '{keyword}'")
-                return self.clear_search()
-            
-            else :
-                messagebox.showinfo("Search", f"Found {len(self.search_results)} results for: {keyword}")
-
-            self.search_page = 1
-            self.update_search_table()
-        except Exception as e:
-            print(f"Search error: {e}")
 
     def update_search_table(self):
         self.teacher_table.delete(*self.teacher_table.get_children())
@@ -383,3 +373,41 @@ class TeacherRecord(tk.Frame):
         elif self.current_page > 1:
             self.current_page -= 1
             self.load_teachers()
+            
+    def set_fields_state(self, state):
+        self.name_entry.config(state=state)
+        if state == "normal":
+            self.grade_entry.config(state="readonly")  # only selectable
+        else:
+            self.grade_entry.config(state="disabled")
+        self.upload_btn.config(state=state)
+        self.remove_btn.config(state=state)
+        
+    def search_teacher(self):
+        keyword = self.search_var.get().strip()
+
+    # If the search box is empty, just load the original data and stop
+        if not keyword: 
+            self.search_results = []
+            self.current_page = 1
+            self.load_teachers()  # use teacher loader, not student
+            return
+
+        try:
+            with db_connect() as conn:
+                with conn.cursor() as cursor:
+                # Search by teacher_name or teacher_grade
+                    query = """
+                SELECT teacher_id, teacher_name, teacher_grade 
+                FROM teacher 
+                WHERE teacher_name LIKE %s OR teacher_grade LIKE %s
+                """
+                    cursor.execute(query, (f"%{keyword}%", f"%{keyword}%"))
+                    self.search_results = cursor.fetchall()
+
+        # Reset search pagination
+            self.search_page = 1
+            self.update_search_table()
+
+        except Exception as e:
+            messagebox.showerror("Database Error", f"Search failed: {e}")

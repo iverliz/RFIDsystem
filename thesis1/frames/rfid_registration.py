@@ -55,18 +55,23 @@ class RfidRegistration(tk.Frame):
             
 
     def setup_ui(self):
+        # 1. REGISTER VALIDATION COMMANDS
+        v_num = self.register(self.contact_limit)
+        v_alpha = self.register(self.student_id_val)
+
+        # 2. HEADER
         header = tk.Frame(self, bg="#0047AB", height=50)
         header.pack(fill="x")
         tk.Label(header, text="RFID REGISTRATION & PAIRING",
                  font=("Helvetica", 16, "bold"), bg="#0047AB", fg="white").pack(pady=10)
         
-        # --- TOP SECTION: COMPACT SPLIT LAYOUT ---
+        # 3. TOP CONTAINER (SPLIT LAYOUT)
         top_container = tk.Frame(self, bg="#b2e5ed")
         top_container.pack(fill="x", padx=15, pady=5)
         top_container.columnconfigure(0, weight=1)
         top_container.columnconfigure(1, weight=1)
 
-        # LEFT SIDE: FETCHER
+        # --- LEFT SIDE: FETCHER ---
         fetcher_frame = tk.LabelFrame(top_container, text=" FETCHER DETAILS ", font=("Arial", 10, "bold"), bg="white", padx=10, pady=5)
         fetcher_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
         
@@ -77,26 +82,32 @@ class RfidRegistration(tk.Frame):
             ("Fetcher Code", self.fetcher_code_var),
             ("Full Name", self.fetcher_name_var),          
             ("Address", self.fetcher_address_var),   
-            ("Contact", self.fetcher_contact_var)
+            ("Contact", self.fetcher_contact_var)  # Index 5
         ])
 
-        # RIGHT SIDE: STUDENT
+        # --- RIGHT SIDE: STUDENT ---
         student_frame = tk.LabelFrame(top_container, text=" STUDENT DETAILS ", font=("Arial", 10, "bold"), bg="white", padx=10, pady=5)
         student_frame.grid(row=0, column=1, sticky="nsew", padx=(5, 0))
         
         self.student_photo_lbl = self.create_photo_box(student_frame)
         self.student_entries = self.create_form(student_frame, [
             ("Student RFID", self.student_rfid_var),
-            ("Student ID", self.student_id_var),
+            ("Student ID", self.student_id_var),   # Index 1
             ("Full Name", self.student_name_var),
-            ("Grade/Sec", self.grade_var),
+            ("Grade/Sec", self.grade_var),         # Index 3 (Spinbox)
             ("Adviser", self.teacher_var)
         ])
 
-        # --- CENTER SECTION: ACTION BUTTONS ---
+        # 4. APPLY VALIDATIONS (Now that entries exist)
+        # Fetcher Contact: Numbers only, limit 11
+        self.fetcher_entries[5].config(validate="key", validatecommand=(v_num, "%P"))
+        
+        # Student ID: Letters and numbers allowed
+        self.student_entries[1].config(validate="key", validatecommand=(v_alpha, "%P"))
+
+        # 5. ACTION BUTTONS
         btn_container = tk.Frame(self, bg="#b2e5ed")
         btn_container.pack(pady=5)
-        
         btn_style = {"font": ("Arial", 9, "bold"), "width": 12, "fg": "white", "relief": "raised", "bd": 1}
         
         self.add_btn = tk.Button(btn_container, text="NEW", bg="#2ecc71", command=self.toggle_add, **btn_style)
@@ -105,7 +116,6 @@ class RfidRegistration(tk.Frame):
         self.edit_btn = tk.Button(btn_container, text="EDIT", bg="#3498db", command=self.toggle_edit, **btn_style)
         self.edit_btn.grid(row=0, column=1, padx=3)
         
-        # THE NEW CLEAR BUTTON
         self.clear_btn = tk.Button(btn_container, text="CLEAR INPUT", bg="#95a5a6", command=self.clear_all, **btn_style)
         self.clear_btn.grid(row=0, column=2, padx=3)
 
@@ -115,29 +125,21 @@ class RfidRegistration(tk.Frame):
         self.delete_btn = tk.Button(btn_container, text="DELETE", bg="#e74c3c", command=self.handle_delete_cancel, **btn_style)
         self.delete_btn.grid(row=0, column=4, padx=3)
 
-        # --- SEARCH BAR ---
+        # 6. SEARCH BAR
         search_frame = tk.Frame(self, bg="#b2e5ed")
         search_frame.pack(fill="x", padx=20, pady=5)
         tk.Label(search_frame, text="🔍 Search:", font=("Arial", 10, "bold"), bg="#b2e5ed").pack(side="left")
         tk.Entry(search_frame, textvariable=self.search_var, font=("Arial", 10), width=35).pack(side="left", padx=10)
-        tk.Button(search_frame, text="Reset Search", font=("Arial", 8), command=lambda: self.search_var.set("")).pack(side="left")
+        tk.Button(search_frame, text="Reset", font=("Arial", 8), command=lambda: self.search_var.set("")).pack(side="left")
 
-        # --- BOTTOM SECTION: DATA TABLE ---
+        # 7. DATA TABLE
         table_frame = tk.Frame(self, bg="white", bd=1, relief="sunken")
         table_frame.pack(fill="both", expand=True, padx=20, pady=(0, 15))
 
-        # In setup_ui, update your columns to include the Code
         cols = ("id", "s_name", "f_name", "f_code", "status")
         self.table = ttk.Treeview(table_frame, columns=cols, show="headings", height=8)
         
-        headings = {
-            "id": "ID", 
-            "s_name": "STUDENT", 
-            "f_name": "FETCHER", 
-            "f_code": "CODE", 
-            "status": "STATUS"
-        }
-        
+        headings = {"id": "ID", "s_name": "STUDENT", "f_name": "FETCHER", "f_code": "CODE", "status": "STATUS"}
         for col in cols:
             self.table.heading(col, text=headings[col])
             self.table.column(col, anchor="center")
@@ -146,25 +148,27 @@ class RfidRegistration(tk.Frame):
         self.table.bind("<<TreeviewSelect>>", self.on_row_select)
 
     def create_photo_box(self, parent):
+    # Create a fixed-size container for the photo (e.g., 180x180 pixels)
         frame = tk.Frame(parent, bg="white")
         frame.pack(pady=5)
-        
-        # Removed width=12, height=4 (text units)
-        # Added a fixed pixel size for the "empty" state
-        container = tk.Label(frame, text="No Photo", bg="#ecf0f1", 
-                             width=20, height=10, # Adjusted for a better "empty" look
-                             relief="solid", bd=1)
-        container.pack()
+
+    # Wrap the label in a fixed-size frame to prevent jumping
+        img_container = tk.Frame(frame, width=180, height=180, bg="#ecf0f1", highlightbackground="white", highlightthickness=1)
+        img_container.pack_propagate(False) # <--- CRITICAL: Prevents frame from shrinking
+        img_container.pack()
+
+        container = tk.Label(img_container, text="No Photo", bg="#ecf0f1", font=("Arial", 8))
+        container.pack(expand=True, fill="both") # Fill the fixed-size frame
+    
         container.image_bytes = None 
-        
+    
         btn_f = tk.Frame(frame, bg="white")
         btn_f.pack(fill="x", pady=2)
-        
-        # Slightly larger buttons for better accessibility
+    
         tk.Button(btn_f, text="Set Photo", font=("Arial", 8), 
-                  command=lambda: self.upload_photo(container)).pack(side="left", expand=True, padx=2)
+                command=lambda: self.upload_photo(container)).pack(side="left", expand=True, padx=2)
         tk.Button(btn_f, text="Clear", font=("Arial", 8), 
-                  command=lambda: self.remove_photo(container)).pack(side="left", expand=True, padx=2)
+                command=lambda: self.remove_photo(container)).pack(side="left", expand=True, padx=2)
         return container
 
     def create_form(self, parent, fields):
@@ -173,11 +177,20 @@ class RfidRegistration(tk.Frame):
         entries = []
         for i, (label, var) in enumerate(fields):
             tk.Label(frame, text=label, bg="white", font=("Arial", 8)).grid(row=i, column=0, sticky="e", pady=1, padx=5)
-            ent = tk.Entry(frame, textvariable=var, font=("Arial", 9), width=22)
+            
+            if label == "Grade/Sec":
+                # K1 to K2, then 1 to 6
+                vals = ["K1", "K2", "1", "2", "3", "4", "5", "6"]
+                # Use state="readonly" so the user CANNOT type, only click
+                ent = tk.Spinbox(frame, textvariable=var, values=vals, font=("Arial", 9), width=20, state="readonly")
+            else:
+                ent = tk.Entry(frame, textvariable=var, font=("Arial", 9), width=22)
+            
             ent.grid(row=i, column=1, pady=1, padx=5, sticky="w")
             entries.append(ent)
         return entries
-
+    
+    
     def remove_photo(self, target):
         if self.mode == "view": return
         target.config(image="", text="No Photo")
@@ -292,6 +305,7 @@ class RfidRegistration(tk.Frame):
             self.delete_btn.config(text="CANCEL")
         else:
             self.save_record()
+            self.reset_load()
             
     def on_row_select(self, event):
         if self.mode != "view": return
@@ -595,3 +609,19 @@ class RfidRegistration(tk.Frame):
                 self.rfid_var.set(uid)
             else:
                 self.student_rfid_var.set(uid)
+
+    def student_id_val(self, v):
+        # Strictly numbers only for Student ID
+        return v.isdigit() or v == ""
+
+    def contact_limit(self, v): 
+        # Strictly numbers only, max 11 digits
+        return (v.isdigit() and len(v) <= 11) or v == ""
+    
+    def unlock_ui(self):
+        for e in self.fetcher_entries + self.student_entries:
+            # If it's a Spinbox, keep it as 'readonly' so they can still click arrows but not type
+            if isinstance(e, tk.Spinbox):
+                e.config(state="readonly")
+            else:
+                e.config(state="normal")

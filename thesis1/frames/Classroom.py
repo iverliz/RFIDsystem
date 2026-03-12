@@ -48,7 +48,7 @@ class ClassroomFrame(tk.Frame):
         tk.Button(
             header,
             text="🔄 REFRESH",
-            command=self.refresh_tables,
+            command=self.refresh_page,
             bg="#2196F3",
             fg="white",
             bd=0,
@@ -56,11 +56,7 @@ class ClassroomFrame(tk.Frame):
         ).pack(side="right", padx=10, pady=25)
 
         tk.Label(
-            header,
-            text=f"Active: {self.real_teacher_name}",
-            font=("Helvetica", 10),
-            bg="#0047AB",
-            fg="#B0C4DE"
+        header, text=f"Active: {self.real_teacher_name}",font=("Helvetica", 10),bg="#0047AB", fg="#B0C4DE"
         ).pack(side="right", padx=10)
 
         # ================= MAIN LAYOUT =================
@@ -70,12 +66,7 @@ class ClassroomFrame(tk.Frame):
         left_col = tk.Frame(main_body, bg="#F0F4F8")
         left_col.pack(side="left", fill="both", expand=True)
 
-        self.right_col = tk.Frame(
-            main_body,
-            bg="white",
-            width=300,
-            highlightthickness=1,
-            highlightbackground="#D1D9E6"
+        self.right_col = tk.Frame(main_body,bg="white", width=300,highlightthickness=1,highlightbackground="#D1D9E6"
         )
         self.right_col.pack(side="right", fill="y", padx=(15, 0))
         
@@ -128,29 +119,48 @@ class ClassroomFrame(tk.Frame):
         self.name_display = tk.Label(action_panel, textvariable=self.found_name_var, font=("Arial", 11, "italic"), bg="white", fg="#0047AB")
         self.name_display.grid(row=1, column=1, sticky="w")
 
-        # Column 2: Control Buttons
+       # Column 2: Control Buttons
         btn_frame = tk.Frame(action_panel, bg="white")
         btn_frame.grid(row=0, column=2, rowspan=2, padx=20)
 
+        button_style = {
+        "font": ("Segoe UI", 9, "bold"),
+        "width": 16,
+        "bd": 0,
+        "cursor": "hand2"
+        }
+
         self.add_btn = tk.Button(
-            btn_frame, text="ADD TO CLASS", bg="#4CAF50", fg="white", 
-            font=("Arial", 9, "bold"), width=16, state="disabled", command=self.add_student_to_class
+        btn_frame,
+        text="➕ ADD STUDENT",
+        bg="#4CAF50",
+        fg="white",
+        state="disabled",
+        command=self.add_student_to_class,
+        **button_style
         )
-        self.add_btn.pack(pady=2)
+        self.add_btn.grid(row=0, column=0, padx=5, pady=3)
 
         self.remove_btn = tk.Button(
-            btn_frame, text="REMOVE FROM CLASS", bg="#F44336", fg="white", 
-            font=("Arial", 9, "bold"), width=16, state="disabled", command=self.remove_student_from_class
+        btn_frame,
+        text="➖ REMOVE",
+        bg="#F44336",
+        fg="white",
+        state="disabled",
+        command=self.remove_student_from_class,
+        **button_style
         )
-        self.remove_btn.pack(pady=2)
-        
-        self.reset_btn = tk.Button(
-            btn_frame, text="RESET CLASS (NEW YEAR)", bg="#607D8B", fg="white", 
-            font=("Arial", 9, "bold"), width=16, command=self.clear_entire_class
-        )
-        self.reset_btn.pack(pady=5)
+        self.remove_btn.grid(row=0, column=1, padx=5, pady=3)
 
-        tk.Label(parent, text="My Enrolled Students", font=("Arial", 12, "bold"), bg="#F0F4F8", fg="#0047AB").pack(anchor="w")
+        self.reset_btn = tk.Button(
+        btn_frame,
+        text="🔄 NEW SCHOOL YEAR",
+        bg="#607D8B",
+        fg="white",
+        command=self.clear_entire_class,
+        **button_style
+        )
+        self.reset_btn.grid(row=0, column=2, padx=5, pady=3)
 
         # Update columns to include Guardian Info
         self.columns = ("ID", "Student ID", "Full Name", "Guardian", "Contact")
@@ -171,31 +181,74 @@ class ClassroomFrame(tk.Frame):
         return tree
 
     def setup_profile_panel(self):
-        tk.Label(self.right_col, text="STUDENT PROFILE", font=("Arial", 11, "bold"), bg="white", fg="#0047AB").pack(pady=15)
+        tk.Label(
+        self.right_col,
+        text="STUDENT PROFILE",
+        font=("Arial", 11, "bold"),
+        bg="white",
+        fg="#0047AB"
+    ).pack(pady=15)
 
-        
-        self.photo_label = tk.Label(self.right_col, text="No Image", bg="#E1E8EE", width=25, height=10, relief="solid", bd=1)
-        self.photo_label.pack(pady=10, padx=20)
+    # Photo container (fixed size)
+        photo_frame = tk.Frame(
+        self.right_col,
+        width=180,
+        height=180,
+        bg="#E1E8EE",
+        relief="solid",
+        bd=1
+    )
+        photo_frame.pack(pady=10)
+        photo_frame.pack_propagate(False)
 
-        self.info_label = tk.Label(self.right_col, text="Select a student...", bg="white", justify="left", font=("Arial", 10), wraplength=250)
+        self.photo_label = tk.Label(photo_frame, text="No Image", bg="#E1E8EE")
+        self.photo_label.pack(expand=True)
+
+        self.info_label = tk.Label(
+            self.right_col,
+        text="Select a student...",
+        bg="white",
+        justify="left",
+        font=("Arial", 10),
+        wraplength=250
+    )
         self.info_label.pack(pady=20, padx=15, fill="x")
-        
-        tk.Label(self.right_col, text="📌 RECENT FETCH LOGS", font=("Arial", 10, "bold"), bg="white", fg="#0047AB").pack(pady=(10, 5))
+
+        tk.Label(
+            self.right_col,
+        text="📌 RECENT FETCH LOGS",
+        font=("Arial", 10, "bold"),
+        bg="white",
+        fg="#0047AB"
+    ).pack(pady=(10, 5))
 
         history_frame = tk.Frame(self.right_col, bg="white")
         history_frame.pack(fill="both", expand=True, padx=5, pady=5)
 
         cols = ("Time", "Fetcher", "Loc")
-        self.history_table = ttk.Treeview(history_frame, columns=cols, show="headings", height=8)
+
+        self.history_table = ttk.Treeview(
+            history_frame,
+            columns=cols,
+            show="headings",
+            height=8
+    )
+
         self.history_table.heading("Time", text="TIME")
         self.history_table.heading("Fetcher", text="BY")
         self.history_table.heading("Loc", text="LOC")
+
         self.history_table.column("Time", width=100, anchor="center")
         self.history_table.column("Fetcher", width=80, anchor="w")
         self.history_table.column("Loc", width=40, anchor="center")
+
         self.history_table.pack(side="left", fill="both", expand=True)
-        
-        h_scroll = ttk.Scrollbar(history_frame, orient="vertical", command=self.history_table.yview)
+
+        h_scroll = ttk.Scrollbar(
+        history_frame,
+        orient="vertical",
+        command=self.history_table.yview
+    )
         self.history_table.configure(yscrollcommand=h_scroll.set)
         h_scroll.pack(side="right", fill="y")
 
@@ -227,37 +280,64 @@ class ClassroomFrame(tk.Frame):
     def add_student_to_class(self):
         sid = self.search_id_var.get().strip()
         sname = self.found_name_var.get()
-        
-        if not messagebox.askyesno("Confirm", f"Add {sname} to your class?"): return
+
+        if not messagebox.askyesno("Confirm", f"Add {sname} to your class?"):
+            return
 
         try:
             with db_connect() as conn:
                 with conn.cursor(dictionary=True) as cur:
-                    # 1. Fetch Name, Guardian info AND the Photo
-                    cur.execute("""SELECT Guardian_name, Guardian_contact, photo_path 
-                                   FROM student WHERE Student_id = %s""", (sid,))
+
+                # 1. Check if student already assigned to a class
+                    cur.execute(
+                    "SELECT teacher_name FROM classroom WHERE student_id = %s",
+                    (sid,)
+                    )
+                    existing = cur.fetchone()
+
+                    if existing:
+                        if existing["teacher_name"] == self.real_teacher_name:
+                            messagebox.showwarning(
+                                "Already Added",
+                                "This student is already in your class."
+                            )
+                        else:
+                            messagebox.showwarning(
+                                "Assigned to Another Class",
+                                f"This student is already assigned to {existing['teacher_name']}'s class."
+                            )
+                        return
+
+                # 2. Fetch student guardian info (optional validation)
+                    cur.execute("""
+                    SELECT Guardian_name, Guardian_contact, photo_path
+                    FROM student
+                    WHERE Student_id = %s
+                """, (sid,))
                     res = cur.fetchone()
-                    
+
                     if not res:
                         messagebox.showerror("Error", "Student record not found.")
                         return
 
-                    # 2. Insert everything into classroom as a permanent snapshot
+                # 3. Insert student to classroom
                     query = """
-                        INSERT INTO classroom 
-                        (teacher_name, student_id, employee_id) 
-                        VALUES (%s, %s, %s)
-                    """
+                    INSERT INTO classroom 
+                    (teacher_name, student_id, employee_id) 
+                    VALUES (%s, %s, %s)
+                """
                     cur.execute(query, (
-                        self.real_teacher_name,
-                        sid,
-                        self.employee_id
-                    ))
+                    self.real_teacher_name,
+                    sid,
+                    self.employee_id
+                ))
+
                     conn.commit()
-            
+
             self.search_id_var.set("")
             self.refresh_tables()
-            messagebox.showinfo("Success", "Student added. Photo and details are now archived in your class.")
+            messagebox.showinfo("Success", "Student added to your class.")
+
         except Exception as e:
             messagebox.showerror("Database Error", str(e))
 
@@ -342,18 +422,15 @@ class ClassroomFrame(tk.Frame):
                         stream = io.BytesIO(photo_blob)
                         img = Image.open(stream)
 
-                        max_size = (180, 180)
-                        img.thumbnail(max_size, Image.Resampling.LANCZOS)
+    
+                        img = img.resize((180, 180), Image.Resampling.LANCZOS)
 
                         self.current_photo = ImageTk.PhotoImage(img)
 
-                        # Force pixel-based size
                         self.photo_label.config(
-                            image=self.current_photo,
-                            text="",
-                            width=180,
-                            height=180
-                        )
+                        image=self.current_photo,
+                        text=""
+                                )
                     else:
                         self.photo_label.config(image='', text="No Photo")
 
@@ -409,7 +486,6 @@ class ClassroomFrame(tk.Frame):
         try:
             with db_connect() as conn:
                 with conn.cursor() as cur:
-                # 1. Check if it's the normal Fetcher/Parent
                     cur.execute("SELECT Student_name FROM student WHERE Student_id = %s AND fetcher_code = %s", 
                             (student_id, scanned_uid))
                     res = cur.fetchone()
@@ -467,7 +543,7 @@ class ClassroomFrame(tk.Frame):
                     now
                     ))
                     conn.commit()
-                    print(f"Log saved: {student_data['Student_name']} fetched by {fetcher_display}")
+                    messagebox.showinfo(f"Log saved: {student_data['Student_name']} fetched by {fetcher_display}")
                 
         except Exception as e:
             print("Logging Error:", e)
@@ -477,14 +553,12 @@ class ClassroomFrame(tk.Frame):
         if not messagebox.askyesno("Confirm Reset", "Are you sure you want to remove ALL students from your class for the new school year?"):
             return
             
-        # 2. Final Warning (Safety First!)
-        if not messagebox.askretrycancel("Final Warning", "This action cannot be undone. Proceed?"):
+        if not messagebox.askyesno("Final Warning", "This action cannot be undone. Proceed?"):
             return
 
         try:
             with db_connect() as conn:
                 with conn.cursor() as cur:
-                    # Deletes only the students linked to THIS teacher
                     cur.execute("DELETE FROM classroom WHERE teacher_name = %s", (self.real_teacher_name,))
                     conn.commit()
             
@@ -493,3 +567,27 @@ class ClassroomFrame(tk.Frame):
             messagebox.showinfo("Success", "Classroom is now empty. You can begin adding new students.")
         except Exception as e:
             messagebox.showerror("Database Error", f"Could not reset class: {e}")
+            
+    def refresh_page(self):
+    # clear input
+        self.search_id_var.set("")
+        self.found_name_var.set("Enter ID...")
+        self.name_display.config(fg="#0047AB")
+
+    # disable buttons
+        self.add_btn.config(state="disabled")
+        self.remove_btn.config(state="disabled")
+
+    # clear profile panel
+        self.info_label.config(text="Select a student...")
+        self.photo_label.config(image='', text="No Image")
+
+    # clear history
+        self.history_table.delete(*self.history_table.get_children())
+
+    # reload table
+        self.refresh_tables()
+        self.id_entry.focus_set()
+        
+        self.photo_label.config(image="", text="No Image")
+        self.current_photo = None

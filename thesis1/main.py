@@ -17,8 +17,7 @@ from frames.Classroom import ClassroomFrame
 from frames.overrride import OverrideFrame
 from frames.signup import SignUpFrame
 from frames.forgot_password import ForgotPasswordFrame
-
-
+from frames.adminoverride import AdminOverrideFrame
 
 class Rfid(tk.Tk):
     def __init__(self):
@@ -52,7 +51,7 @@ class Rfid(tk.Tk):
     def show_frame(self, name):
         restricted_pages = [
             "MainDashboard", "StudentRecord", "TeacherRecord","ClassroomFrame",
-            "FetcherRecord", "RfidRegistration","OverrideFrame", "RFIDHistory", 
+            "FetcherRecord", "RfidRegistration","OverrideFrame","AdminOverrideFrame", "RFIDHistory", 
             "Report", "Account"
         ]
         
@@ -74,7 +73,6 @@ class Rfid(tk.Tk):
     
 
     def dispatch_rfid(self, uid):
-        # Always start from MainDashboard after login
         dashboard = self.frames.get("MainDashboard")
 
         if dashboard and hasattr(dashboard, "current_frame") and dashboard.current_frame:
@@ -83,16 +81,13 @@ class Rfid(tk.Tk):
             active_frame = self.frames.get(self.current_frame_name)
 
         if not active_frame:
-            print("Debug: Active frame not found.")
             return
 
         if hasattr(active_frame, "handle_rfid_tap"):
-            print(f"Success: Calling handle_rfid_tap on {type(active_frame).__name__}")
             active_frame.handle_rfid_tap(uid)
+
         elif hasattr(active_frame, "handle_rfid_scan"):
             active_frame.handle_rfid_scan(uid)
-        else:
-            print(f"Warning: {type(active_frame).__name__} has no RFID handler.")
 
     # Check for the specific methods regardless of the class name
 
@@ -146,9 +141,9 @@ class Rfid(tk.Tk):
     def on_closing(self):
         self.running = False
         self.destroy()
+        
 
 if __name__ == "__main__":
     app = Rfid()
     app.protocol("WM_DELETE_WINDOW", app.on_closing)
     app.mainloop()
-    

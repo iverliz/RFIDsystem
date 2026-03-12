@@ -125,9 +125,12 @@ class StudentRecord(tk.Frame):
         self.right_panel.place(x=520, y=90)
         self.right_panel.pack_propagate(False)
 
-        tk.Label(self.right_panel, text="Search Student (Name or  Student ID )", font=("Arial", 14, "bold"), bg="white").place(x=20, y=15)
+        tk.Label(self.right_panel, text="Search Student (Name or Student ID )", font=("Arial", 14, "bold"), bg="white").place(x=20, y=15)
 
         self.search_var = tk.StringVar()
+
+        self.search_var.trace_add("write", lambda *args: self.search_student())
+
         tk.Entry(self.right_panel, textvariable=self.search_var, width=25, font=("Arial", 11)).place(x=20, y=50)
 
         tk.Button(self.right_panel, text="Search", command=self.search_student).place(x=260, y=47)
@@ -188,23 +191,32 @@ class StudentRecord(tk.Frame):
         self.display_photo(None) # Updated call
 
 
-    def only_numbers(self, v): return v.isdigit() or v == ""
-    def contact_limit(self, v): return (v.isdigit() and len(v) <= 11) or v == ""
+    def only_numbers(self, v): 
+        return v.isdigit() or v == ""
 
-    def format_contact(self, *_):
-        val = self.guardian_contact_var.get()
-        if val.startswith("9") and len(val) == 10: self.guardian_contact_var.set("0" + val)
+    def contact_limit(self, v): 
+        return (v.isdigit() and len(v) <= 11) or v == ""
+
+    def format_contact(self, *args):
+        # Ensure this matches the variable name in your StudentRecord class
+        val = self.guardian_contact_var.get() 
+        if val.startswith("9") and len(val) == 10: 
+            self.guardian_contact_var.set("0" + val)
 
     def set_fields_state(self, state):
         for label, entry in self.entries.items():
-            if label == "Grade:": entry.config(state="readonly" if state == "disabled" else "normal")
-            else: entry.config(state=state)
+            if label == "Grade:":
+                new_state = "readonly" if state == "normal" else "disabled"
+                entry.config(state=new_state)
+            else:
+                entry.config(state=state)
+    
         self.upload_btn.config(state=state)
         self.remove_photo_btn.config(state=state)
 
     def reset_ui_state(self):
         self.edit_mode = False
-        self.set_fields_state("disabled")
+        self.set_fields_state("disabled") # This now correctly disables the Grade box too
         self.student_id_entry.config(state="disabled")
         self.add_btn.config(text="ADD", state="normal", bg="#4CAF50")
         self.edit_btn.config(state="normal")
@@ -235,26 +247,6 @@ class StudentRecord(tk.Frame):
         except Exception as e:
             print(f"Load error: {e}")
 
-    def search_student(self):
-        keyword = self.search_var.get().strip()
-        if not keyword: 
-            messagebox.showinfo("Search", "Please enter a keyword.") 
-            return self.clear_search()
-        try:
-            with db_connect() as conn:
-                with conn.cursor() as cursor:
-                    query = "SELECT Student_id, Student_name, grade_lvl FROM student WHERE Student_name LIKE %s OR Student_id LIKE %s"
-                    cursor.execute(query, (f"%{keyword}%", f"%{keyword}%"))
-                    self.search_results = cursor.fetchall()
-            
-            if not self.search_results:
-                messagebox.showinfo("Search", "No results found.")
-                return self.clear_search()
-            
-            self.search_page = 1
-            self.update_search_table()
-        except Exception as e:
-            print(f"Search error: {e}")
 
     def update_search_table(self):
         self.student_table.delete(*self.student_table.get_children())
@@ -294,25 +286,39 @@ class StudentRecord(tk.Frame):
                 self.load_data()
 
     def on_table_select(self, _):
-        if self.edit_mode or self.add_btn["text"] == "SAVE": return
+    # Prevent changing selection if we are currently saving a new student
+        if self.add_btn["text"] == "SAVE": return
+    
         sel = self.student_table.selection()
         if not sel: return
         sid = self.student_table.item(sel[0], "values")[0]
+    
         try:
             with db_connect() as conn:
                 with conn.cursor(dictionary=True) as cursor:
                     cursor.execute("SELECT * FROM student WHERE Student_id=%s", (sid,))
                     student = cursor.fetchone()
+        
             if student:
+            # Temporarily set to normal so the code can change the value
+                self.entries["Grade:"].config(state="normal")
+            
                 self.student_id_var.set(student["Student_id"])
                 self.student_name_var.set(student["Student_name"])
                 self.grade_var.set(student["grade_lvl"])
                 self.guardian_name_var.set(student["Guardian_name"])
                 self.guardian_contact_var.set(student["Guardian_contact"])
-                
-                # Fetching the BLOB from the photo_path column
+            
                 self.photo_path = student["photo_path"] 
                 self.display_photo(self.photo_path)
+            
+            # NOW LOCK IT: 
+            # If we are NOT in edit mode, disable the fields.
+                if not self.edit_mode:
+                    self.set_fields_state("disabled")
+                else:
+                    self.set_fields_state("normal")
+                
         except Exception as e:
             print(f"Select error: {e}")
 
@@ -383,12 +389,16 @@ class StudentRecord(tk.Frame):
         if new_sid != self.original_student_id and self.student_id_exists(new_sid):
             return messagebox.showerror("Error", f"Student ID {new_sid} is taken.")
 
-        binary_photo = self.photo_path if isinstance(self.photo_path, bytes) else None
-        if self.photo_path and isinstance(self.photo_path, str):
-            img = Image.open(self.photo_path).convert("RGB")
-            buf = io.BytesIO()
-            img.save(buf, format='JPEG')
-            binary_photo = buf.getvalue()
+        binary_photo = None
+
+        if self.photo_path:
+            if isinstance(self.photo_path, bytes):
+                binary_photo = self.photo_path
+            else:
+                img = Image.open(self.photo_path).convert("RGB")
+                buf = io.BytesIO()
+                img.save(buf, format='JPEG')
+                binary_photo = buf.getvalue()
 
         try:
             with db_connect() as conn:
@@ -453,3 +463,30 @@ class StudentRecord(tk.Frame):
                     cur.execute("SELECT Student_id FROM student WHERE Student_id=%s", (sid,))
                     return cur.fetchone() is not None
         except: return False
+        
+    def search_student(self):
+        keyword = self.search_var.get().strip()
+    
+    # If the search box is empty, just load the original data and stop
+        if not keyword: 
+            self.search_results = []
+            self.current_page = 1
+            self.load_data()
+            return
+
+        try:
+            with db_connect() as conn:
+                with conn.cursor() as cursor:
+                # Search by Name or Student ID
+                    query = "SELECT Student_id, Student_name, grade_lvl FROM student WHERE Student_name LIKE %s OR Student_id LIKE %s"
+                    cursor.execute(query, (f"%{keyword}%", f"%{keyword}%"))
+                    self.search_results = cursor.fetchall()
+        
+        # Instead of a messagebox, we just update the table (even if empty)
+            self.search_page = 1
+            self.update_search_table()
+        
+        except Exception as e:
+            messagebox.showerror("Database Error", f"Search failed: {e}")
+            
+    
