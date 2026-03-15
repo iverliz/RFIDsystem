@@ -45,7 +45,6 @@ class Rfid(tk.Tk):
 
         self.show_frame("LoginFrame")
         
-        # Start the global Arduino listener
         self.start_serial_listener()
 
     def show_frame(self, name):
@@ -70,8 +69,6 @@ class Rfid(tk.Tk):
         self.current_frame_name = name
         self.frames[name].tkraise()
 
-    
-
     def dispatch_rfid(self, uid):
         dashboard = self.frames.get("MainDashboard")
 
@@ -88,8 +85,6 @@ class Rfid(tk.Tk):
 
         elif hasattr(active_frame, "handle_rfid_scan"):
             active_frame.handle_rfid_scan(uid)
-
-    # Check for the specific methods regardless of the class name
 
     def login_success(self, user_data):
         self.current_user = user_data  

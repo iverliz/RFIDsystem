@@ -91,7 +91,6 @@ class AdminOverrideFrame(tk.Frame):
         self.refresh_list()
         self.clear_form()
 
-    # ---------------- UI STATE CONTROL ----------------
     def set_ui_state(self, state):
         if state == "idle":
             self.emp_id_entry.config(state="disabled")
@@ -126,7 +125,9 @@ class AdminOverrideFrame(tk.Frame):
         if not selected:
             messagebox.showwarning("Selection Required", "Please select a record.")
             return
+
         values = self.tree.item(selected, "values")
+
         self.mode = "edit"
         self.set_ui_state("active")
 
@@ -148,10 +149,14 @@ class AdminOverrideFrame(tk.Frame):
         self.rfid_entry.config(state="normal")
         self.rfid_entry.delete(0, tk.END)
         self.set_ui_state("idle")
+        self.mode_label.config(text="IDLE: SELECT ACTION", bg="#f5f5f5", fg="#757575")
 
     def handle_save(self):
         eid = self.emp_id_entry.get().strip()
         uid = self.rfid_entry.get().strip()
+        if self.mode not in ("add", "edit"):
+            messagebox.showwarning("Action Required", "Please click ADD or EDIT first.")
+            return
         if not eid or not uid:
             messagebox.showwarning("Input Error", "Admin ID and RFID UID are required.")
             return
@@ -168,15 +173,16 @@ class AdminOverrideFrame(tk.Frame):
                     if self.mode == "add":
                         # Check existing registration
                         cur.execute("SELECT employee_id FROM admin_rfid_registration WHERE employee_id=%s", (eid,))
-                        if cur.fetchone():
-                            messagebox.showerror("Error", "This Admin is already registered. Use Edit instead.")
+                        existing = cur.fetchone()
+                        if existing and existing [0] != eid:
+                            messagebox.showerror("Error", "This admin is already registered. Use Edit instead.")
                             return
                         cur.execute("INSERT INTO admin_rfid_registration (employee_id, rfid_uid, status) VALUES (%s, %s, 'Active')", (eid, uid))
                     else:  # edit
                         cur.execute("UPDATE admin_rfid_registration SET rfid_uid=%s WHERE employee_id=%s", (uid, eid))
                     conn.commit()
 
-            messagebox.showinfo("Success", "Database updated successfully.")
+            messagebox.showinfo("Success", "Updated successfully.")
             self.refresh_list()
             self.clear_form()
         except Exception as e:
@@ -199,29 +205,51 @@ class AdminOverrideFrame(tk.Frame):
             self.tree.tag_configure('active', foreground='green')
             self.tree.tag_configure('inactive', foreground='red')
         except Exception as e:
-            print(f"List Refresh Error: {e}")
+            messagebox.showerror("Error", str(e))
 
     def handle_delete(self):
         selected = self.tree.focus()
         if not selected:
             messagebox.showwarning("Select Record", "Please select a record first.")
             return
+
         eid = self.tree.item(selected, "values")[0]
-        if messagebox.askyesno("Confirm Delete", "Delete this Admin RFID?"):
-            try:
-                with db_connect() as conn:
-                    with conn.cursor() as cur:
-                        cur.execute("DELETE FROM admin_rfid_registration WHERE employee_id=%s", (eid,))
+
+        try:
+            with db_connect() as conn:
+                with conn.cursor() as cur:
+
+                # 🔎 Check status first
+                    cur.execute(
+                    "SELECT status FROM admin_rfid_registration WHERE employee_id=%s",
+                    (eid,)
+                    )
+                    result = cur.fetchone()
+
+                    if result and result[0] == "Active":
+                        messagebox.showerror("Error", "Cannot delete an ACTIVE RFID. Please deactivate it first.")
+                        return
+
+                    if messagebox.askyesno("Confirm Delete", "Delete this Admin RFID?"):
+                        cur.execute(
+                            "DELETE FROM admin_rfid_registration WHERE employee_id=%s",
+                            (eid,)
+                        )
                         conn.commit()
-                self.refresh_list()
-                self.clear_form()
-            except Exception as e:
-                messagebox.showerror("Error", str(e))
+
+            self.refresh_list()
+            self.clear_form()
+
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
 
     def toggle_status(self, new_status):
         selected = self.tree.focus()
-        if not selected: return
-        eid = self.tree.item(selected, "values")[0]
+        if not selected:
+            messagebox.showwarning("Select Record", "Please select a record first.")
+            return
+        value = self.tree.item(selected, "values")
+        eid = value[0]
         try:
             with db_connect() as conn:
                 with conn.cursor() as cur:

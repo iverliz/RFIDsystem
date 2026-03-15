@@ -17,7 +17,8 @@ class FetcherRecord(tk.Frame):
         self.controller = controller
         
         # ================= STATE VARIABLES =================
-        self.photo_path = None
+        self.photo_path = None       # local file path for upload
+        self.photo_bytes = None      # bytes from DB
         self.photo = None 
         self.edit_mode = False
         self.current_fetcher_id = None
@@ -59,6 +60,7 @@ class FetcherRecord(tk.Frame):
         self.edit_label = tk.Label(self.left_box, text="VIEW MODE", font=("Arial", 10, "bold"), fg="gray", bg="white")
         self.edit_label.place(x=300, y=10)
 
+        # ================= FORM FIELDS =================
         self.fetcher_code_var = tk.StringVar()
         self.fetcher_name_var = tk.StringVar()
         self.address_var = tk.StringVar()
@@ -76,50 +78,19 @@ class FetcherRecord(tk.Frame):
         y_start = 200
         for i, (label, var) in enumerate(fields):
             tk.Label(self.left_box, text=label, bg="white", font=("Arial", 11)).place(x=20, y=y_start + i * 40)
-    
+            
             if label == "Contact Number:":
-        # Use the registered validation command
                 ent = tk.Entry(self.left_box, textvariable=var, width=30, font=("Arial", 11),
-                       validate="key", validatecommand=(self.contact_validate, "%P"))
-            elif label == "Fetcher Code:":
-                ent = tk.Entry(self.left_box, textvariable=var, width=30, font=("Arial", 11))
-                ent.config(state="readonly", readonlybackground="#f0f0f0")
+                               validate="key", validatecommand=(self.contact_validate, "%P"))
             else:
                 ent = tk.Entry(self.left_box, textvariable=var, width=30, font=("Arial", 11))
-    
-            ent.place(x=150, y=y_start + i * 40)
-            self.entries.append(ent)
-    
-    # Check if this is the Contact Number field
-        if label == "Contact Number:":
-            ent = tk.Entry(self.left_box, textvariable=var, width=30, font=("Arial", 11),
-                       validate="key", validatecommand=(self.contact_validate, "%P"))
-        elif label == "Fetcher Code:":
-            ent = tk.Entry(self.left_box, textvariable=var, width=30, font=("Arial", 11))
-            ent.config(state="readonly", readonlybackground="#f0f0f0")
-        else:
-            ent = tk.Entry(self.left_box, textvariable=var, width=30, font=("Arial", 11))
-    
-        ent.place(x=150, y=y_start + i * 40)
-        self.entries.append(ent)
-        # Form Variables
-    
-        self.entries = []
-        y_start = 200
-        for i, (label, var) in enumerate(fields):
-            tk.Label(self.left_box, text=label, bg="white", font=("Arial", 11)).place(x=20, y=y_start + i * 40)
-            ent = tk.Entry(self.left_box, textvariable=var, width=30, font=("Arial", 11))
+                if label == "Fetcher Code:":
+                    ent.config(state="readonly", readonlybackground="#f0f0f0")
             
-            if label == "Fetcher Code:":
-                ent.config(state="readonly", readonlybackground="#f0f0f0")
-            if label == "Contact Number:":
-                ent = tk.Entry(self.left_box, textvariable=var, width=30, font=("Arial", 11),
-                   validate="key", validatecommand=(self.contact_validate, "%P"))
-                
             ent.place(x=150, y=y_start + i * 40)
             self.entries.append(ent)
 
-        # Action Buttons
+        # ================= ACTION BUTTONS =================
         btn_frame = tk.Frame(self.left_box, bg="white")
         btn_frame.place(x=15, y=420)
         
@@ -148,8 +119,6 @@ class FetcherRecord(tk.Frame):
         self.search_var.trace_add("write", lambda *args: self.search_fetcher())
         tk.Entry(self.right_panel, textvariable=self.search_var, width=30, font=("Arial", 11)).place(x=20, y=50)
         tk.Button(self.right_panel, text="Search", command=self.search_fetcher).place(x=280, y=47)
-        
-        # Link Clear button to clear_search for full UI reset
         tk.Button(self.right_panel, text="Clear", command=self.clear_search).place(x=340, y=47)
 
         self.fetcher_count_var = tk.StringVar(value="Total: 0 | Page 1/1")
@@ -180,6 +149,7 @@ class FetcherRecord(tk.Frame):
         tk.Button(nav, text="◀ Prev", command=self.prev_page).grid(row=0, column=0, padx=5)
         tk.Button(nav, text="Next ▶", command=self.next_page).grid(row=0, column=1, padx=5)
 
+        # ================= INITIAL STATE =================
         self.reset_ui_state()
         self.load_data()
 
@@ -470,7 +440,6 @@ class FetcherRecord(tk.Frame):
         return (v.isdigit() and len(v) <= 11) or v == ""
 
     def format_contact(self, *args):
-        # Ensure this matches the variable name in your StudentRecord class
         val = self.contact_var.get() 
         if val.startswith("9") and len(val) == 10: 
             self.contact_var.set("0" + val)
@@ -478,19 +447,16 @@ class FetcherRecord(tk.Frame):
     def search_fetcher(self):
         keyword = self.search_var.get().strip()
 
-    # If the search box is empty, just load the original data and stop
         if not keyword: 
             self.search_results = []
             self.current_page = 1
             self.load_data()
-            self.clear_fields() # Added to clean UI on reset
+            self.clear_fields()
             return
 
         try:
             with db_connect() as conn:
                 with conn.cursor() as cursor:
-                # Updated query to match your Fetcher table columns
-                # Includes ID so your table selection logic still works
                     query = """
                     SELECT ID, fetcher_code, fetcher_name, Address, contact 
                     FROM fetcher 
@@ -498,7 +464,6 @@ class FetcherRecord(tk.Frame):
                        OR fetcher_code LIKE %s 
                        OR Address LIKE %s
                     """
-                # We use the same keyword for all three placeholders
                     search_param = f"%{keyword}%"
                     cursor.execute(query, (search_param, search_param, search_param))
                 
